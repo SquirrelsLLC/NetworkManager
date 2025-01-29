@@ -1926,6 +1926,60 @@ _p2p_provision_discovery_cb(GDBusConnection *connection,
 }
 
 static void
+_p2p_handle_set_device_config_cb(GVariant *res, GError *error, gpointer user_data)
+{
+    /** 
+     * BMEEK: connect to provision discovery request signals
+     * The signals should be
+     * ProvisionDiscoveryRequestDisplayPin
+     * ProvisionDiscoveryPBCRequest
+     * ProvisionDiscoveryFailure
+     * */ 
+    NMSupplicantInterface        *self;
+    NMSupplicantInterfacePrivate *priv;
+    // WfdDevTypeData                      *p2p_config_data;
+    GVariantBuilder               start_args;
+    guint8                        bssid_buf[ETH_ALEN];
+
+    _LOGD("Handle p2p_set_device_config callback!");
+
+    // p2p_config_data = user_data;
+    // self     = p2p_config_data->self;
+
+    if (res)
+        _LOGT("p2p: set P2PDeviceConfig with success");
+    else
+        _LOGW("p2p: set P2PDeviceConfig failed with %s", error->message);
+
+    // BMEEK: subscribe to the PBC provision discovery signal as well. We should be conditionally subscribing to these signals based on our supported wpa_s config methods
+
+    _LOGD("Subscribing to the ProvisionDiscoveryRequest signals");
+
+    //  p2p_config_data->signal_id = 
+    g_dbus_connection_signal_subscribe(priv->dbus_connection,
+                                                             priv->name_owner->str,
+                                                             NM_WPAS_DBUS_IFACE_INTERFACE_P2P_DEVICE,
+                                                             "ProvisionDiscoveryRequestDisplayPin",
+                                                             priv->object_path->str,
+                                                             NULL,
+                                                             G_DBUS_SIGNAL_FLAGS_NONE,
+                                                             _p2p_provision_discovery_cb,
+                                                             self,
+                                                             NULL);
+    g_dbus_connection_signal_subscribe(priv->dbus_connection,
+                                                             priv->name_owner->str,
+                                                             NM_WPAS_DBUS_IFACE_INTERFACE_P2P_DEVICE,
+                                                             "ProvisionDiscoveryFailure",
+                                                             priv->object_path->str,
+                                                             NULL,
+                                                             G_DBUS_SIGNAL_FLAGS_NONE,
+                                                             _p2p_provision_discovery_cb,
+                                                             self,
+                                                             NULL);
+
+}
+
+static void
 _p2p_call_set_device_config(NMSupplicantInterface *self)// , WfdConfigData *p2p_config_data)
 {
     NMSupplicantInterfacePrivate *priv = NM_SUPPLICANT_INTERFACE_GET_PRIVATE(self);
@@ -1964,66 +2018,6 @@ _p2p_call_set_device_config(NMSupplicantInterface *self)// , WfdConfigData *p2p_
                                 NULL,
                                 _p2p_handle_set_device_config_cb,
                                 NULL);
-}
-
-static void
-_p2p_handle_set_device_config_cb(GObject *source, GAsyncResult *result, gpointer user_data)
-{
-    /** 
-     * BMEEK: connect to provision discovery request signals
-     * The signals should be
-     * ProvisionDiscoveryRequestDisplayPin
-     * ProvisionDiscoveryPBCRequest
-     * ProvisionDiscoveryFailure
-     * */ 
-    NMSupplicantInterface        *self;
-    NMSupplicantInterfacePrivate *priv;
-    // WfdDevTypeData                      *p2p_config_data;
-    GVariantBuilder               start_args;
-    guint8                        bssid_buf[ETH_ALEN];
-    gs_unref_variant GVariant *res   = NULL;
-    gs_free_error GError      *error = NULL;
-
-    _LOGD("Handle p2p_set_device_config callback!");
-
-    res = g_dbus_connection_call_finish(G_DBUS_CONNECTION(source), result, &error);
-    if (nm_utils_error_is_cancelled(error))
-        return;
-
-    // p2p_config_data = user_data;
-    // self     = p2p_config_data->self;
-
-    if (res)
-        _LOGT("wps: started with success");
-    else
-        _LOGW("wps: start failed with %s", error->message);
-
-    //  p2p_config_data->signal_id = 
-    // BMEEK: subscribe to the PBC provision discovery signal as well. We should be conditionally subscribing to these signals based on our supported wpa_s config methods
-
-    _LOGD("Subscribing to the ProvisionDiscoveryRequest signals");
-
-    g_dbus_connection_signal_subscribe(priv->dbus_connection,
-                                                             priv->name_owner->str,
-                                                             NM_WPAS_DBUS_IFACE_INTERFACE_P2P_DEVICE,
-                                                             "ProvisionDiscoveryRequestDisplayPin",
-                                                             priv->object_path->str,
-                                                             NULL,
-                                                             G_DBUS_SIGNAL_FLAGS_NONE,
-                                                             _p2p_provision_discovery_cb,
-                                                             self,
-                                                             NULL);
-    g_dbus_connection_signal_subscribe(priv->dbus_connection,
-                                                             priv->name_owner->str,
-                                                             NM_WPAS_DBUS_IFACE_INTERFACE_P2P_DEVICE,
-                                                             "ProvisionDiscoveryFailure",
-                                                             priv->object_path->str,
-                                                             NULL,
-                                                             G_DBUS_SIGNAL_FLAGS_NONE,
-                                                             _p2p_provision_discovery_cb,
-                                                             self,
-                                                             NULL);
-
 }
 
 void
