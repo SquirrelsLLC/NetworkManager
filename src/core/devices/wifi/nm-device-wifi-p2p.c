@@ -274,7 +274,7 @@ complete_connection(NMDevice            *device,
     const char       *setting_peer;
     const char       *wfd_mode;
 
-    _LOGD("BMEEK :: Device P2P :: Complete Connection");
+    _LOGD(LOGD_P2P,"BMEEK :: Device P2P :: Complete Connection");
 
     s_wifi_p2p =
         NM_SETTING_WIFI_P2P(nm_connection_get_setting(connection, NM_TYPE_SETTING_WIFI_P2P));
@@ -387,7 +387,7 @@ act_stage1_prepare(NMDevice *device, NMDeviceStateReason *out_failure_reason)
     NMWifiP2PPeer          *peer;
     const char             *wfd_mode;
 
-    _LOGD("BMEEK :: Device P2P :: Act_Stage 1 :: Prepare!");
+    _LOGD(LOGD_P2P,"BMEEK :: Device P2P :: Act_Stage 1 :: Prepare!");
     
     if (!priv->mgmt_iface) {
         NM_SET_OUT(out_failure_reason, NM_DEVICE_STATE_REASON_SUPPLICANT_FAILED);
@@ -410,10 +410,10 @@ act_stage1_prepare(NMDevice *device, NMDeviceStateReason *out_failure_reason)
     } else {
         priv->wfd_device_mode = _NM_SETTING_WIFI_P2P_WFD_DEVICE_MODE_NONE;
     }
-    _LOGD("BMEEK :: Device P2P :: Act_Stage 1 :: Set WFD Mode : %s",wfd_mode);
+    _LOGD(LOGD_P2P,"BMEEK :: Device P2P :: Act_Stage 1 :: Set WFD Mode : %s",wfd_mode);
 
     if(priv->wfd_device_mode != _NM_SETTING_WIFI_P2P_WFD_DEVICE_MODE_SINK) {
-        _LOGD("BMEEK :: Device P2P :: Act_Stage 1 :: WFD_SOURCE or Normal P2P - activating connection with Peer");
+        _LOGD(LOGD_P2P,"BMEEK :: Device P2P :: Act_Stage 1 :: WFD_SOURCE or Normal P2P - activating connection with Peer");
         peer = nm_wifi_p2p_peers_find_first_compatible(&priv->peers_lst_head, connection, FALSE);
         if (!peer) {
             /* Set up a timeout on the find attempt and run a find for the same period of time */
@@ -426,7 +426,7 @@ act_stage1_prepare(NMDevice *device, NMDeviceStateReason *out_failure_reason)
             return NM_ACT_STAGE_RETURN_POSTPONE;
         }
     } else {
-        _LOGD("BMEEK :: Device P2P :: Act_Stage 1 :: WFD_SINK - proceeding with SINK connection activation");
+        _LOGD(LOGD_P2P,"BMEEK :: Device P2P :: Act_Stage 1 :: WFD_SINK - proceeding with SINK connection activation");
     }
 
     return NM_ACT_STAGE_RETURN_SUCCESS;
@@ -472,7 +472,7 @@ act_stage2_config(NMDevice *device, NMDeviceStateReason *out_failure_reason)
     GBytes                 *wfd_ies;
     const char             *wfd_mode;
     
-    _LOGD("BMEEK :: Device P2P :: Act_Stage 2 :: Config!");
+    _LOGD(LOGD_P2P,"BMEEK :: Device P2P :: Act_Stage 2 :: Config!");
     
     if(priv->wfd_device_mode != _NM_SETTING_WIFI_P2P_WFD_DEVICE_MODE_SINK) {
         if (nm_clear_g_source(&priv->find_peer_timeout_id))
@@ -492,7 +492,7 @@ act_stage2_config(NMDevice *device, NMDeviceStateReason *out_failure_reason)
     // Not that it would really matter, but if this is not a WFD p2p device, we don't need to set any WFD IEs
     if(priv->wfd_device_mode != _NM_SETTING_WIFI_P2P_WFD_DEVICE_MODE_NONE) {
 
-        _LOGD("BMEEK :: Device P2P :: Act_Stage 2 ::  This is a WFD P2P device, calling supplicant_manager to set global WFD IEs in wpa_supplicant");
+        _LOGD(LOGD_P2P,"BMEEK :: Device P2P :: Act_Stage 2 ::  This is a WFD P2P device, calling supplicant_manager to set global WFD IEs in wpa_supplicant");
 
         /* Set the WFD IEs before trying to establish the connection. */
         s_wifi_p2p = NM_SETTING_WIFI_P2P(nm_connection_get_setting(connection, NM_TYPE_SETTING_WIFI_P2P));
@@ -500,10 +500,10 @@ act_stage2_config(NMDevice *device, NMDeviceStateReason *out_failure_reason)
         wfd_ies = nm_setting_wifi_p2p_get_wfd_ies(s_wifi_p2p);
         nm_supplicant_manager_set_wfd_ies(priv->sup_mgr, wfd_ies);
 
-        _LOGD("BMEEK :: Device P2P :: Act_Stage 2 ::  Attempting to set wpa_supplicant WPS data");
+        _LOGD(LOGD_P2P,"BMEEK :: Device P2P :: Act_Stage 2 ::  Attempting to set wpa_supplicant WPS data");
         nm_supplicant_interface_create_p2p_device_config(priv->mgmt_iface);
 
-        _LOGD("BMEEK :: Device P2P :: Act_Stage 2 ::  Activating Start Find on management interface");
+        _LOGD(LOGD_P2P,"BMEEK :: Device P2P :: Act_Stage 2 ::  Activating Start Find on management interface");
         nm_supplicant_interface_p2p_start_find(priv->mgmt_iface, 42);
         return NM_ACT_STAGE_RETURN_POSTPONE;
     }
@@ -632,7 +632,7 @@ act_stage3_ip_config(NMDevice *device, int addr_family)
     NMConnection           *connection;
     const char             *method;
 
-    _LOGD("BMEEK :: Device P2P :: Act_Stage 3 :: ip_config!");
+    _LOGD(LOGD_P2P,"BMEEK :: Device P2P :: Act_Stage 3 :: ip_config!");
 
     connection = nm_device_get_applied_connection(device);
 

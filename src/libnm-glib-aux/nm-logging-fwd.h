@@ -49,6 +49,7 @@ typedef enum {
     LOGD_SYSTEMD    = (1LL << 35),
     LOGD_VPN_PLUGIN = (1LL << 36),
     LOGD_PROXY      = (1LL << 37),
+    LOGD_P2P        = (1LL << 38),
 
     __LOGD_MAX,
     LOGD_ALL     = (((__LOGD_MAX - 1LL) << 1) - 1LL),

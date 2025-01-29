@@ -183,6 +183,7 @@ static const LogDesc domain_desc[] = {
     {LOGD_SYSTEMD, "SYSTEMD"},
     {LOGD_VPN_PLUGIN, "VPN_PLUGIN"},
     {LOGD_PROXY, "PROXY"},
+    {LOGD_P2P, "P2P"},
     {0},
 };
 
