@@ -192,6 +192,8 @@ void nm_supplicant_interface_enroll_wps(NMSupplicantInterface *self,
 
 void nm_supplicant_interface_cancel_wps(NMSupplicantInterface *self);
 
+void nm_supplicant_interface_create_p2p_device_config(NMSupplicantInterface *self);
+
 NMSupplicantAuthState nm_supplicant_interface_get_auth_state(NMSupplicantInterface *self);
 
 void nm_supplicant_interface_set_bridge(NMSupplicantInterface *self, const char *bridge);

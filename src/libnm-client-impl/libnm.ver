@@ -1828,6 +1828,8 @@ global:
 libnm_1_36_0 {
 global:
 	nm_setting_ovs_dpdk_get_n_rxq;
+	nm_setting_wifi_p2p_wfd_device_mode_get_type;
+	nm_device_wifi_p2p_set_wfd_ies;
 } libnm_1_34_0;
 
 libnm_1_38_0 {

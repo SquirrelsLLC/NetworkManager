@@ -37,6 +37,7 @@ NMRefString     *nm_supplicant_manager_get_dbus_name_owner(NMSupplicantManager *
 NMSupplCapMask   nm_supplicant_manager_get_global_capabilities(NMSupplicantManager *self);
 
 void nm_supplicant_manager_set_wfd_ies(NMSupplicantManager *self, GBytes *wfd_ies);
+GBytes *nm_supplicant_manager_get_wfd_ies(NMSupplicantManager *self);
 
 typedef struct _NMSupplMgrCreateIfaceHandle NMSupplMgrCreateIfaceHandle;
 

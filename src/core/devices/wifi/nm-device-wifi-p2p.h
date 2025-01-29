@@ -35,4 +35,8 @@ void nm_device_wifi_p2p_set_mgmt_iface(NMDeviceWifiP2P *self, NMSupplicantInterf
 
 void nm_device_wifi_p2p_remove(NMDeviceWifiP2P *self);
 
+void nm_device_wifi_p2p_set_mgmt_wfd_ies(NMDeviceWifiP2P *self, GBytes* ies);
+
+GBytes *nm_device_wifi_p2p_get_mgmt_wfd_ies(NMDeviceWifiP2P *self);
+
 #endif /* __NM_DEVICE_WIFI_P2P_H__ */

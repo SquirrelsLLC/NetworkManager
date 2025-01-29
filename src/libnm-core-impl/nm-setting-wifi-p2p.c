@@ -11,6 +11,7 @@
 
 #include "nm-utils.h"
 #include "libnm-core-aux-intern/nm-common-macros.h"
+#include "nm-core-enum-types.h"
 #include "nm-utils-private.h"
 #include "nm-setting-private.h"
 
@@ -32,12 +33,15 @@
 
 /*****************************************************************************/
 
-NM_GOBJECT_PROPERTIES_DEFINE_BASE(PROP_PEER, PROP_WPS_METHOD, PROP_WFD_IES, );
+NM_GOBJECT_PROPERTIES_DEFINE_BASE(PROP_PEER, PROP_WPS_METHOD, PROP_WFD_DEVICE_MODE, PROP_WFD_IES, );
 
 typedef struct {
     char   *peer;
     GBytes *wfd_ies;
+    char    *wfd_device_mode;
     guint32 wps_method;
+
+
 } NMSettingWifiP2PPrivate;
 
 struct _NMSettingWifiP2P {
@@ -104,6 +108,21 @@ nm_setting_wifi_p2p_get_wfd_ies(NMSettingWifiP2P *setting)
 
     return NM_SETTING_WIFI_P2P_GET_PRIVATE(setting)->wfd_ies;
 }
+/**
+ * nm_setting_wifi_p2p_get_wfd_device_mode
+ * @setting: the #NMSettingWiFiP2P
+ * 
+ * Returns: the #NMSettingWifiP2P:wfd-device-mode property of the setting
+ * 
+ * since 1.36
+ */
+const char *
+nm_setting_wifi_p2p_get_wfd_device_mode(NMSettingWifiP2P * setting)
+{
+    g_return_val_if_fail(NM_IS_SETTING_WIFI_P2P(setting), NULL);
+
+    return NM_SETTING_WIFI_P2P_GET_PRIVATE(setting)->wfd_device_mode;
+}
 
 /*****************************************************************************/
 
@@ -111,30 +130,83 @@ static gboolean
 verify(NMSetting *setting, NMConnection *connection, GError **error)
 {
     NMSettingWifiP2PPrivate *priv = NM_SETTING_WIFI_P2P_GET_PRIVATE(setting);
+    const char              *valid_modes[] = { NM_SETTING_WIFI_P2P_MODE_NONE,
+                                 NM_SETTING_WIFI_P2P_MODE_SINK,
+                                 NM_SETTING_WIFI_P2P_MODE_SOURCE,
+                                 NULL};
 
-    if (!priv->peer) {
-        g_set_error_literal(error,
+    if(priv->wfd_device_mode && !g_strv_contains(valid_modes, priv->wfd_device_mode)){
+        g_set_error(error,
+                    NM_CONNECTION_ERROR,
+                    NM_CONNECTION_ERROR_INVALID_PROPERTY,
+                    _("'%s' is not a valid P2P WFD mode"),
+                    priv->wfd_device_mode);
+        g_prefix_error(error,
+                       "%s.%s: ",
+                       NM_SETTING_WIFI_P2P_SETTING_NAME,
+                       NM_SETTING_WIFI_P2P_WFD_DEVICE_MODE);
+        return FALSE;
+    }
+
+
+    // Settings verification that ONLY applies to p2p devices that wish to act as a Miracst Sink
+    if(g_strcmp0(priv->wfd_device_mode, NM_SETTING_WIFI_P2P_MODE_SINK) == 0){
+
+    }
+    // Settings verification that is specific to Miracast Sources and Sinks. These settings do not apply to standard p2p connections
+    else if(g_strcmp0(priv->wfd_device_mode, NM_SETTING_WIFI_P2P_MODE_NONE) != 0) {
+        
+        // Both Miracast Sinks and Sources should both specificy a set of WFD IEs to include in the P2P wifi frames
+        if(!priv->wfd_ies) {
+            g_set_error_literal(error,
                             NM_CONNECTION_ERROR,
                             NM_CONNECTION_ERROR_MISSING_PROPERTY,
                             _("property is missing"));
-        g_prefix_error(error,
+            g_prefix_error(error,
                        "%s.%s: ",
                        NM_SETTING_WIFI_P2P_SETTING_NAME,
-                       NM_SETTING_WIFI_P2P_PEER);
-        return FALSE;
-    }
+                       NM_SETTING_WIFI_P2P_WFD_IES);
+        }
 
-    if (!nm_utils_hwaddr_valid(priv->peer, ETH_ALEN)) {
-        g_set_error_literal(error,
+    }
+    // Settings verification that should apply to non-Miracast AND Miracast Sources devices (Source devices behave pretty similarly to a regular p2p device) 
+    else {
+
+        // Settings verification that is specific to p2p devices that wish to present themselves as a Miracast Source
+        if(g_strcmp0(priv->wfd_device_mode, NM_SETTING_WIFI_P2P_MODE_SOURCE) == 0) {
+
+        }
+        // Settings verification that is specific to regular p2p devices ONLY
+        else {
+            if(priv->wfd_ies) {
+            g_set_error_literal(error,
                             NM_CONNECTION_ERROR,
                             NM_CONNECTION_ERROR_INVALID_PROPERTY,
-                            _("property is invalid"));
-        g_prefix_error(error,
+                            _("WFD IEs should not be set if the WFD Device Mode is also None"));
+            g_prefix_error(error,
                        "%s.%s: ",
                        NM_SETTING_WIFI_P2P_SETTING_NAME,
-                       NM_SETTING_WIFI_P2P_PEER);
-        return FALSE;
+                       NM_SETTING_WIFI_P2P_WFD_IES);
+        }
+        }
+
+        // Regular p2p devices, and Miracast sources must specify the peer that they intend to connect with in the settings
+        // Miracast Sinks typically start in a state that acts like a "p2p access point" - so there shouldn't be a specified peer that is part of the connection settings
+        if(!priv->peer) {
+            g_set_error_literal(error,
+                            NM_CONNECTION_ERROR,
+                            NM_CONNECTION_ERROR_MISSING_PROPERTY,
+                            _("property is missing"));
+            g_prefix_error(error,
+                        "%s.%s: ",
+                        NM_SETTING_WIFI_P2P_SETTING_NAME,
+                        NM_SETTING_WIFI_P2P_PEER);
+            return FALSE;
+        }
     }
+
+    // General setting verification that should apply to ALL p2p devices
+
 
     if (!_nm_utils_wps_method_validate(priv->wps_method,
                                        NM_SETTING_WIFI_P2P_SETTING_NAME,
@@ -204,6 +276,21 @@ nm_setting_wifi_p2p_class_init(NMSettingWifiP2PClass *setting_wifi_p2p_class)
                                               _priv.peer,
                                               .direct_string_allow_empty = TRUE);
 
+    /**
+     * NMSettingWifiP2P:wfd-device-mode:
+     *
+     * These flags indicate what Wi-Fi Display mode the device should function as.
+     *
+     * Since: 1.36
+     */
+    _nm_setting_property_define_direct_string(properties_override,
+                                            obj_properties,
+                                            NM_SETTING_WIFI_P2P_WFD_DEVICE_MODE,
+                                            PROP_WFD_DEVICE_MODE,
+                                            NM_SETTING_PARAM_NONE,
+                                            NMSettingWifiP2P,
+                                            _priv.wfd_device_mode);
+    
     /**
      * NMSettingWifiP2P:wps-method:
      *

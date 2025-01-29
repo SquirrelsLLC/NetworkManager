@@ -219,9 +219,8 @@ on_supplicant_wfd_ies_set(GObject *source_object, GAsyncResult *result, gpointer
 /**
  * nm_supplicant_manager_set_wfd_ies:
  * @self: the #NMSupplicantManager
- * @wfd_ies: a #GBytes with the WFD IEs or %NULL
  *
- * This function sets the global WFD IEs on wpa_supplicant. Note that
+ * This function gets the global WFD IEs on wpa_supplicant. Note that
  * it would make more sense if this was per-device, but wpa_supplicant
  * simply does not work that way.
  * */
@@ -258,6 +257,20 @@ nm_supplicant_manager_set_wfd_ies(NMSupplicantManager *self, GBytes *wfd_ies)
                            NULL,
                            on_supplicant_wfd_ies_set,
                            NULL);
+}
+
+/**
+ * nm_supplicant_manager_get_wfd_ies:
+ * @self: the #NMSupplicantManager
+ * 
+ * This function gets the global WFD IEs in wpa_supplicant. Note that
+ * it would make more sense if this was per-device, but wpa_supplicant
+ * simply does not work that way.
+ * */
+GBytes *
+nm_supplicant_manager_get_wfd_ies(NMSupplicantManager *self) {
+    // BMEEK: pull the WFD IE's from wpa_supplicant over dbus
+    return NULL;
 }
 
 /*****************************************************************************/

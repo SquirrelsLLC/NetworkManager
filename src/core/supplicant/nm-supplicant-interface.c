@@ -36,6 +36,16 @@ typedef struct {
     bool                   is_cancelling : 1;
 } WpsData;
 
+typedef struct {
+    NMSupplicantInterface *self;
+    char                  *config_methods;
+    guint                  primary_type;
+    char                  *secure_methods;
+    guint                  sub_type;
+    // guint                  oui; TODO: add OUI parameter. For Wi-Fi Display devices, this value will always be the same though.
+    guint                  go_intent;
+} WfdConfigData;
+
 struct _AddNetworkData;
 
 typedef struct {
@@ -1894,6 +1904,136 @@ nm_supplicant_interface_cancel_wps(NMSupplicantInterface *self)
 
 /*****************************************************************************/
 
+static void
+_p2p_provision_discovery_cb(GDBusConnection *connection,
+                            const char      *sender_name,
+                            const char      *object_path,
+                            const char      *signal_interface_name,
+                            const char      *signal_name,
+                            GVariant        *parameters,
+                            gpointer         user_data) {
+
+    NMSupplicantInterface     *self  = user_data;
+    gs_unref_variant GVariant *props = NULL;
+/*
+    if (!g_variant_is_of_type(parameters, G_VARIANT_TYPE("(a{sv})")))
+        return;
+
+    g_variant_get(parameters, "(@a{sv})", &props);
+*/
+
+    _LOGD("Provision Discovery (%s) Signal Callback!",signal_name);
+}
+
+static void
+_p2p_call_set_device_config(NMSupplicantInterface *self)// , WfdConfigData *p2p_config_data)
+{
+    NMSupplicantInterfacePrivate *priv = NM_SUPPLICANT_INTERFACE_GET_PRIVATE(self);
+
+    // BMEEK: Build G_Variant out of p2p_config_data. Also build out the rest of the p2p IEs and Vender Extension IEs
+
+    // Set the device name
+    GVariantBuilder* variantBuilder = g_variant_builder_new(G_VARIANT_TYPE("a{sv}"));
+    g_variant_builder_add(variantBuilder, "{sv}", "DeviceName",
+                          g_variant_new("s", "Reflector Miracast"));
+    // Automatically accept persistent reconnects
+    g_variant_builder_add(variantBuilder, "{sv}", "PersistentReconnect", g_variant_new("b", 1));
+
+    // Build primary device type - 7-0050F204-1 - it's an ay
+    // wps_dev_type_str2bin says 7 -> Big Ending 16, hex->bin, BigEnding 16
+    GVariantBuilder* typeBuilder = g_variant_builder_new(G_VARIANT_TYPE("ay"));
+    g_variant_builder_add(typeBuilder, "y", 0);
+    g_variant_builder_add(typeBuilder, "y", 1);
+    g_variant_builder_add(typeBuilder, "y", 0x00);
+    g_variant_builder_add(typeBuilder, "y", 0x50);
+    g_variant_builder_add(typeBuilder, "y", 0xF2);
+    g_variant_builder_add(typeBuilder, "y", 0x04);
+    g_variant_builder_add(typeBuilder, "y", 0);
+    g_variant_builder_add(typeBuilder, "y", 1);
+
+    g_variant_builder_add(variantBuilder, "{sv}", "PrimaryDeviceType", g_variant_new("ay", typeBuilder));
+
+    _LOGD("DBUS :: setting P2PDeviceConfig");
+    nm_dbus_connection_call_set(priv->dbus_connection,
+                                priv->name_owner->str,
+                                priv->object_path->str,
+                                NM_WPAS_DBUS_IFACE_INTERFACE_P2P_DEVICE,
+                                "P2PDeviceConfig",
+                                g_variant_new("a{sv}",variantBuilder),
+                                5000,
+                                NULL,
+                                _p2p_handle_set_device_config_cb,
+                                NULL);
+}
+
+static void
+_p2p_handle_set_device_config_cb(GObject *source, GAsyncResult *result, gpointer user_data)
+{
+    /** 
+     * BMEEK: connect to provision discovery request signals
+     * The signals should be
+     * ProvisionDiscoveryRequestDisplayPin
+     * ProvisionDiscoveryPBCRequest
+     * ProvisionDiscoveryFailure
+     * */ 
+    NMSupplicantInterface        *self;
+    NMSupplicantInterfacePrivate *priv;
+    // WfdDevTypeData                      *p2p_config_data;
+    GVariantBuilder               start_args;
+    guint8                        bssid_buf[ETH_ALEN];
+    gs_unref_variant GVariant *res   = NULL;
+    gs_free_error GError      *error = NULL;
+
+    _LOGD("Handle p2p_set_device_config callback!");
+
+    res = g_dbus_connection_call_finish(G_DBUS_CONNECTION(source), result, &error);
+    if (nm_utils_error_is_cancelled(error))
+        return;
+
+    // p2p_config_data = user_data;
+    // self     = p2p_config_data->self;
+
+    if (res)
+        _LOGT("wps: started with success");
+    else
+        _LOGW("wps: start failed with %s", error->message);
+
+    //  p2p_config_data->signal_id = 
+    // BMEEK: subscribe to the PBC provision discovery signal as well. We should be conditionally subscribing to these signals based on our supported wpa_s config methods
+
+    _LOGD("Subscribing to the ProvisionDiscoveryRequest signals");
+
+    g_dbus_connection_signal_subscribe(priv->dbus_connection,
+                                                             priv->name_owner->str,
+                                                             NM_WPAS_DBUS_IFACE_INTERFACE_P2P_DEVICE,
+                                                             "ProvisionDiscoveryRequestDisplayPin",
+                                                             priv->object_path->str,
+                                                             NULL,
+                                                             G_DBUS_SIGNAL_FLAGS_NONE,
+                                                             _p2p_provision_discovery_cb,
+                                                             self,
+                                                             NULL);
+    g_dbus_connection_signal_subscribe(priv->dbus_connection,
+                                                             priv->name_owner->str,
+                                                             NM_WPAS_DBUS_IFACE_INTERFACE_P2P_DEVICE,
+                                                             "ProvisionDiscoveryFailure",
+                                                             priv->object_path->str,
+                                                             NULL,
+                                                             G_DBUS_SIGNAL_FLAGS_NONE,
+                                                             _p2p_provision_discovery_cb,
+                                                             self,
+                                                             NULL);
+
+}
+
+void
+nm_supplicant_interface_create_p2p_device_config(NMSupplicantInterface *self)
+{
+    _LOGD("Supplicant Interface wants to set wpas p2p-device-confg!");
+    _p2p_call_set_device_config(self);
+}
+
+/*****************************************************************************/
 static void
 iface_introspect_cb(GObject *source, GAsyncResult *result, gpointer user_data)
 {
