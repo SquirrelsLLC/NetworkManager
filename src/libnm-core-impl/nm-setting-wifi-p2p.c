@@ -38,7 +38,7 @@ NM_GOBJECT_PROPERTIES_DEFINE_BASE(PROP_PEER, PROP_WPS_METHOD, PROP_WFD_DEVICE_MO
 typedef struct {
     char   *peer;
     GBytes *wfd_ies;
-    char    *wfd_device_mode;
+    char   *wfd_device_mode;
     guint32 wps_method;
 
 
@@ -273,23 +273,7 @@ nm_setting_wifi_p2p_class_init(NMSettingWifiP2PClass *setting_wifi_p2p_class)
                                               PROP_PEER,
                                               NM_SETTING_PARAM_NONE,
                                               NMSettingWifiP2P,
-                                              _priv.peer,
-                                              .direct_string_allow_empty = TRUE);
-
-    /**
-     * NMSettingWifiP2P:wfd-device-mode:
-     *
-     * These flags indicate what Wi-Fi Display mode the device should function as.
-     *
-     * Since: 1.36
-     */
-    _nm_setting_property_define_direct_string(properties_override,
-                                            obj_properties,
-                                            NM_SETTING_WIFI_P2P_WFD_DEVICE_MODE,
-                                            PROP_WFD_DEVICE_MODE,
-                                            NM_SETTING_PARAM_NONE,
-                                            NMSettingWifiP2P,
-                                            _priv.wfd_device_mode);
+                                              _priv.peer);
     
     /**
      * NMSettingWifiP2P:wps-method:
@@ -311,6 +295,21 @@ nm_setting_wifi_p2p_class_init(NMSettingWifiP2PClass *setting_wifi_p2p_class)
                                               NM_SETTING_PARAM_FUZZY_IGNORE,
                                               NMSettingWifiP2P,
                                               _priv.wps_method);
+                                              
+    /**
+     * NMSettingWifiP2P:wfd-device-mode:
+     *
+     * These flags indicate what Wi-Fi Display mode the device should function as.
+     *
+     * Since: 1.36
+     */
+    _nm_setting_property_define_direct_string(properties_override,
+                                            obj_properties,
+                                            NM_SETTING_WIFI_P2P_WFD_DEVICE_MODE,
+                                            PROP_WFD_DEVICE_MODE,
+                                            NM_SETTING_PARAM_NONE,
+                                            NMSettingWifiP2P,
+                                            _priv.wfd_device_mode);
 
     /**
      * NMSettingWifiP2P:wfd-ies:

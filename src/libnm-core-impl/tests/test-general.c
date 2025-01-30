@@ -258,6 +258,48 @@ test_wireless_wake_on_wlan_enum(void)
 /*****************************************************************************/
 
 static void
+test_wifi_p2p_wfd_device_mode(void)
+{
+    nm_auto_unref_gtypeclass GEnumClass *enum_class = NULL;
+    gs_unref_hashtable GHashTable       *vals       = g_hash_table_new(nm_direct_hash, NULL);
+    guint                                i;
+
+    G_STATIC_ASSERT_EXPR(sizeof(NMWifiP2pWfdDeviceMode) == sizeof(_NMWifiP2pWfdDeviceMode));
+    G_STATIC_ASSERT_EXPR(sizeof(NMWifiP2pWfdDeviceMode) < sizeof(gint64));
+
+    G_STATIC_ASSERT_EXPR(sizeof(NMWifiP2pWfdDeviceMode) < sizeof(gint64));
+    g_assert((((gint64) ((NMWifiP2pWfdDeviceMode) -1)) < 0) == (((gint64) ((_NMWifiP2pWfdDeviceMode) -1)) < 0));
+
+#define _E(n)                                            \
+    G_STMT_START                                         \
+    {                                                    \
+        G_STATIC_ASSERT_EXPR(n == (gint64) _##n);        \
+        G_STATIC_ASSERT_EXPR(_##n == (gint64) n);        \
+        g_assert(n == NM_WIFI_P2P_WFD_DEVICE_MODE_CAST(_##n));        \
+        if (!g_hash_table_add(vals, GINT_TO_POINTER(n))) \
+            g_assert_not_reached();                      \
+    }                                                    \
+    G_STMT_END
+    _E(NM_WIFI_P2P_WFD_DEVICE_MODE_NONE);
+    _E(NM_WIFI_P2P_WFD_DEVICE_MODE_SOURCE);
+    _E(NM_WIFI_P2P_WFD_DEVICE_MODE_SINK);
+#undef _E
+
+    enum_class = G_ENUM_CLASS(g_type_class_ref(NM_TYPE_WIFI_P2P_WFD_DEVICE_MODE));
+    for (i = 0; i < enum_class->n_values; i++) {
+        const GEnumValue *value = &enum_class->values[i];
+
+        if (!g_hash_table_contains(vals, GINT_TO_POINTER(value->value))) {
+            g_error("The enum value %s from NMWifiP2pWfdDeviceMode is not checked for "
+                    "_NMWifiP2pWfdDeviceMode",
+                    value->value_name);
+        }
+    }
+}
+
+/*****************************************************************************/
+
+static void
 test_device_wifi_capabilities(void)
 {
     nm_auto_unref_gtypeclass GFlagsClass *flags_class = NULL;
@@ -11599,6 +11641,8 @@ main(int argc, char **argv)
     g_test_add_func("/core/general/test_wired_wake_on_lan_enum", test_wired_wake_on_lan_enum);
     g_test_add_func("/core/general/test_wireless_wake_on_wlan_enum",
                     test_wireless_wake_on_wlan_enum);
+    g_test_add_func("/core/general/test_wifi_p2p_wfd_device_mode",
+                    test_wifi_p2p_wfd_device_mode);
     g_test_add_func("/core/general/test_device_wifi_capabilities", test_device_wifi_capabilities);
     g_test_add_func("/core/general/test_80211_mode", test_80211_mode);
     g_test_add_func("/core/general/test_vlan_flags", test_vlan_flags);

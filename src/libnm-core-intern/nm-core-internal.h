@@ -158,6 +158,12 @@ _NM_SETTING_WIRELESS_WAKE_ON_WLAN_CAST(NMSettingWirelessWakeOnWLan v)
     return (_NMSettingWirelessWakeOnWLan) v;
 }
 
+static inline NMWifiP2pWfdDeviceMode
+NM_WIFI_P2P_WFD_DEVICE_MODE_CAST(_NMWifiP2pWfdDeviceMode v)
+{
+    return(NMWifiP2pWfdDeviceMode) v;
+}
+
 static inline NM80211Mode
 NM_802_11_MODE_CAST(_NM80211Mode v)
 {

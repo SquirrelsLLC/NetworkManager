@@ -57,7 +57,7 @@ typedef struct {
     guint peer_missing_id;
 
     /* Wi-Fi Display Components */
-    NMSettingWifiP2pWfdDeviceMode wfd_device_mode;
+    _NMWifiP2pWfdDeviceMode wfd_device_mode;
     guint broadcast_p2p_timeout_id;
 
     bool is_waiting_for_supplicant : 1;
@@ -403,16 +403,16 @@ act_stage1_prepare(NMDevice *device, NMDeviceStateReason *out_failure_reason)
 
     wfd_mode = nm_setting_wifi_p2p_get_wfd_device_mode(s_wifi_p2p);
     if (g_strcmp0(wfd_mode, NM_SETTING_WIFI_P2P_MODE_SINK) == 0) {
-        priv->wfd_device_mode = _NM_SETTING_WIFI_P2P_WFD_DEVICE_MODE_SINK;
+        priv->wfd_device_mode = _NM_WIFI_P2P_WFD_DEVICE_MODE_SINK;
     }
     else if (g_strcmp0(wfd_mode, NM_SETTING_WIFI_P2P_MODE_SOURCE) == 0) {
-        priv->wfd_device_mode = _NM_SETTING_WIFI_P2P_WFD_DEVICE_MODE_SOURCE;
+        priv->wfd_device_mode = _NM_WIFI_P2P_WFD_DEVICE_MODE_SOURCE;
     } else {
-        priv->wfd_device_mode = _NM_SETTING_WIFI_P2P_WFD_DEVICE_MODE_NONE;
+        priv->wfd_device_mode = _NM_WIFI_P2P_WFD_DEVICE_MODE_NONE;
     }
     _LOGD(LOGD_P2P,"BMEEK :: Device P2P :: Act_Stage 1 :: Set WFD Mode : %s",wfd_mode);
 
-    if(priv->wfd_device_mode != _NM_SETTING_WIFI_P2P_WFD_DEVICE_MODE_SINK) {
+    if(priv->wfd_device_mode != _NM_WIFI_P2P_WFD_DEVICE_MODE_SINK) {
         _LOGD(LOGD_P2P,"BMEEK :: Device P2P :: Act_Stage 1 :: WFD_SOURCE or Normal P2P - activating connection with Peer");
         peer = nm_wifi_p2p_peers_find_first_compatible(&priv->peers_lst_head, connection, FALSE);
         if (!peer) {
@@ -474,7 +474,7 @@ act_stage2_config(NMDevice *device, NMDeviceStateReason *out_failure_reason)
     
     _LOGD(LOGD_P2P,"BMEEK :: Device P2P :: Act_Stage 2 :: Config!");
     
-    if(priv->wfd_device_mode != _NM_SETTING_WIFI_P2P_WFD_DEVICE_MODE_SINK) {
+    if(priv->wfd_device_mode != _NM_WIFI_P2P_WFD_DEVICE_MODE_SINK) {
         if (nm_clear_g_source(&priv->find_peer_timeout_id))
             nm_assert_not_reached();
     }
@@ -490,7 +490,7 @@ act_stage2_config(NMDevice *device, NMDeviceStateReason *out_failure_reason)
         NM_IS_SETTING_WIFI_P2P(nm_connection_get_setting(connection, NM_TYPE_SETTING_WIFI_P2P)));
 
     // Not that it would really matter, but if this is not a WFD p2p device, we don't need to set any WFD IEs
-    if(priv->wfd_device_mode != _NM_SETTING_WIFI_P2P_WFD_DEVICE_MODE_NONE) {
+    if(priv->wfd_device_mode != _NM_WIFI_P2P_WFD_DEVICE_MODE_NONE) {
 
         _LOGD(LOGD_P2P,"BMEEK :: Device P2P :: Act_Stage 2 ::  This is a WFD P2P device, calling supplicant_manager to set global WFD IEs in wpa_supplicant");
 
@@ -501,7 +501,7 @@ act_stage2_config(NMDevice *device, NMDeviceStateReason *out_failure_reason)
         nm_supplicant_manager_set_wfd_ies(priv->sup_mgr, wfd_ies);
 
         _LOGD(LOGD_P2P,"BMEEK :: Device P2P :: Act_Stage 2 ::  Attempting to set wpa_supplicant WPS data");
-        nm_supplicant_interface_create_p2p_device_config(priv->mgmt_iface);
+        nm_supplicant_interface_create_p2p_device_config(priv->mgmt_iface,"01","01","PIN,PBC",0);
 
         _LOGD(LOGD_P2P,"BMEEK :: Device P2P :: Act_Stage 2 ::  Activating Start Find on management interface");
         nm_supplicant_interface_p2p_start_find(priv->mgmt_iface, 42);
@@ -509,7 +509,7 @@ act_stage2_config(NMDevice *device, NMDeviceStateReason *out_failure_reason)
     }
 
     // WFD Sink devices will not be concered with connecting to a peer at this time
-    if(priv->wfd_device_mode != _NM_SETTING_WIFI_P2P_WFD_DEVICE_MODE_SINK) {
+    if(priv->wfd_device_mode != _NM_WIFI_P2P_WFD_DEVICE_MODE_SINK) {
         /* The prepare stage ensures that the peer has been found */
         peer = nm_wifi_p2p_peers_find_first_compatible(&priv->peers_lst_head, connection, FALSE);
         if (!peer) {

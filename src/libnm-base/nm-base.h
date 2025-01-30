@@ -278,11 +278,11 @@ typedef enum {
 } _NMVlanFlags;
 
 typedef enum {    
-    /* Mirrors libnm's NMSettingWifiP2PWfdDevice Mode*/                                          
-    _NM_SETTING_WIFI_P2P_WFD_DEVICE_MODE_NONE        = 0,    
-    _NM_SETTING_WIFI_P2P_WFD_DEVICE_MODE_SOURCE      = 1,
-    _NM_SETTING_WIFI_P2P_WFD_DEVICE_MODE_SINK        = 2,
-} _NMSettingWifiP2pWfdDeviceMode;
+    /* Mirrors libnm's NMWifiP2pWfdDeviceMode*/                                          
+    _NM_WIFI_P2P_WFD_DEVICE_MODE_NONE        = 0,    
+    _NM_WIFI_P2P_WFD_DEVICE_MODE_SOURCE      = 1,
+    _NM_WIFI_P2P_WFD_DEVICE_MODE_SINK        = 2,
+} _NMWifiP2pWfdDeviceMode;
 
 typedef enum {
     /* Mirrors libnm's NMSriovEswitchMode.

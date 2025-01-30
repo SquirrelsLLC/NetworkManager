@@ -431,6 +431,20 @@ typedef enum { /*< underscore_name=nm_802_11_mode >*/
 } NM80211Mode;
 
 /**
+ * NMWifiP2pWfdDeviceMode:
+ * @NM_WIFI_P2P_WFD_DEVICE_MODE_NONE: Standard P2P device. No Wi-Fi Display Capabilities
+ * @NM_WIFI_P2P_WFD_DEVICE_MODE_SOURCE: P2P device that acts as a Wi-Fi Display Source
+ * @NM_WIFI_P2P_WFD_DEVICE_MODE_SINK: P2P device  that acts as a Wi-Fi Display Sink
+ *
+ * Indicates the Wi-Fi Display device mode a p2p device is currently acting as
+ **/
+typedef enum {                                              
+    NM_WIFI_P2P_WFD_DEVICE_MODE_NONE        = 0,    
+    NM_WIFI_P2P_WFD_DEVICE_MODE_SOURCE      = 1,
+    NM_WIFI_P2P_WFD_DEVICE_MODE_SINK        = 2,
+} NMWifiP2pWfdDeviceMode;
+
+/**
  * NMBluetoothCapabilities:
  * @NM_BT_CAPABILITY_NONE: device has no usable capabilities
  * @NM_BT_CAPABILITY_DUN: device provides Dial-Up Networking capability
