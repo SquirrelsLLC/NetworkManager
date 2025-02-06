@@ -1950,6 +1950,24 @@ _p2p_provision_discovery_cb(GDBusConnection *connection,
 }
 
 static void
+_p2p_handle_set__config_methods_cb(GVariant *res, GError *error, gpointer user_data)
+{
+    NMSupplicantInterface        *self;
+    NMSupplicantInterfacePrivate *priv;
+    P2pConfigData                *p2p_config_data;
+
+
+    if (nm_utils_error_is_cancelled(error))
+        return;
+
+    p2p_config_data = user_data;
+    self     = p2p_config_data->self;
+    priv = NM_SUPPLICANT_INTERFACE_GET_PRIVATE(self);
+
+    _LOGD("Handle p2p_set__config_methods_cb callback!");
+}
+
+static void
 _p2p_handle_set_device_config_cb(GVariant *res, GError *error, gpointer user_data)
 {
     /** 
@@ -1999,11 +2017,24 @@ _p2p_call_set_device_config(NMSupplicantInterface *self, P2pConfigData *p2p_conf
 {
     GVariantBuilder variantBuilder;
     GVariantBuilder typeBuilder;
-    // GVariantBuilder typeBuilder2;
+    GVariantBuilder typeBuilder2;
     NMSupplicantInterfacePrivate *priv = NM_SUPPLICANT_INTERFACE_GET_PRIVATE(self);
 
     if(!p2p_config_data->cancellable)
         p2p_config_data->cancellable = g_cancellable_new();
+
+    _LOGD("DBUS :: setting WPS Config Methods");
+    nm_dbus_connection_call_set(priv->dbus_connection,
+                                priv->name_owner->str,
+                                priv->object_path->str,
+                                NM_WPAS_DBUS_IFACE_INTERFACE_WPS,
+                                "ConfigMethods",
+                                g_variant_new_string("push_button"),
+                                5000,
+                                NULL,
+                                _p2p_handle_set__config_methods_cb,
+                                p2p_config_data);
+    
 
     // BMEEK: Build G_Variant out of p2p_config_data. Also build out the rest of the p2p IEs and Vender Extension IEs
 
@@ -2028,6 +2059,7 @@ _p2p_call_set_device_config(NMSupplicantInterface *self, P2pConfigData *p2p_conf
     g_variant_builder_add(&variantBuilder, "{sv}", "PrimaryDeviceType", g_variant_new("ay", &typeBuilder));
     g_variant_builder_unref(&typeBuilder);
     
+    /* These parameters are only set if EAPOL is supported
     uint8_t in_our_ip[4] = {10, 5, 5, 1};
     uint8_t in_subnet_mask[4] = {255, 255, 255, 0};
     uint8_t in_peer_ip[4] = {10, 5, 5, 100};
@@ -2067,6 +2099,53 @@ _p2p_call_set_device_config(NMSupplicantInterface *self, P2pConfigData *p2p_conf
 
     g_variant_builder_add(&variantBuilder, "{sv}", "IpAddrEnd", g_variant_new("ay", &typeBuilder));
     g_variant_builder_unref(&typeBuilder);
+    */
+
+   // Vender Extension Attributes
+    g_variant_builder_init(&typeBuilder, G_VARIANT_TYPE_BYTESTRING);
+    // Vendor Extension subelement: Microsoft OUI
+    g_variant_builder_add(&typeBuilder, "y", 0x00);
+    g_variant_builder_add(&typeBuilder, "y", 0x01);
+    g_variant_builder_add(&typeBuilder, "y", 0x37);
+    // Vendor Extension subelement: MICE Capability
+    g_variant_builder_add(&typeBuilder, "y", 0x20);
+    g_variant_builder_add(&typeBuilder, "y", 0x01);
+    // Len 1
+    g_variant_builder_add(&typeBuilder, "y", 0x00);
+    g_variant_builder_add(&typeBuilder, "y", 0x01);
+    // MICE disabled
+    g_variant_builder_add(&typeBuilder, "y", 0x04);
+    // Vendor Extension subelement: Host Name
+    g_variant_builder_add(&typeBuilder, "y", 0x20);
+    g_variant_builder_add(&typeBuilder, "y", 0x02);
+    // Len 18
+    g_variant_builder_add(&typeBuilder, "y", 0x00);
+    g_variant_builder_add(&typeBuilder, "y", 0x12);
+    //"Reflector Miracast" [18] 52 65 66 6C 65 63 74 6F 72 20 4D 69 72 61 63 61 73 74
+    g_variant_builder_add(&typeBuilder, "y", 0x52);
+    g_variant_builder_add(&typeBuilder, "y", 0x65);
+    g_variant_builder_add(&typeBuilder, "y", 0x66);
+    g_variant_builder_add(&typeBuilder, "y", 0x6C);
+    g_variant_builder_add(&typeBuilder, "y", 0x65);
+    g_variant_builder_add(&typeBuilder, "y", 0x63);
+    g_variant_builder_add(&typeBuilder, "y", 0x74);
+    g_variant_builder_add(&typeBuilder, "y", 0x6F);
+    g_variant_builder_add(&typeBuilder, "y", 0x72);
+    g_variant_builder_add(&typeBuilder, "y", 0x20);
+    g_variant_builder_add(&typeBuilder, "y", 0x4D);
+    g_variant_builder_add(&typeBuilder, "y", 0x69);
+    g_variant_builder_add(&typeBuilder, "y", 0x72);
+    g_variant_builder_add(&typeBuilder, "y", 0x61);
+    g_variant_builder_add(&typeBuilder, "y", 0x63);
+    g_variant_builder_add(&typeBuilder, "y", 0x61);
+    g_variant_builder_add(&typeBuilder, "y", 0x73);
+    g_variant_builder_add(&typeBuilder, "y", 0x74);
+
+    g_variant_builder_init(&typeBuilder2, G_VARIANT_TYPE_BYTESTRING_ARRAY);
+    g_variant_builder_add_value(&typeBuilder2, g_variant_new("ay", &typeBuilder));
+    g_variant_builder_add(&variantBuilder, "{sv}", "VendorExtension", g_variant_new("aay", &typeBuilder2));
+    g_variant_builder_unref(&typeBuilder);
+    g_variant_builder_unref(&typeBuilder2);
 
 
     _LOGD("DBUS :: setting P2PDeviceConfig");
@@ -2097,7 +2176,7 @@ _p2p_start_device_config(NMSupplicantInterface *self, char *primaryDeviceType, c
         if(!primaryDeviceType || !primarySubType)
             return;
 
-        if (priv->state == NM_SUPPLICANT_INTERFACE_STATE_DOWN) { //BMEEK: this *may* not be true. will have to see what happens with testing.
+        if (priv->state == NM_SUPPLICANT_INTERFACE_STATE_DOWN) {
             _LOGD("p2pDevConfig: interface is down. Cannot start with P2P Device Config");
             return;
         }
