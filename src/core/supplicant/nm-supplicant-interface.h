@@ -86,6 +86,8 @@ typedef enum {
 #define NM_SUPPLICANT_INTERFACE_WPS_CREDENTIALS "wps-credentials"
 #define NM_SUPPLICANT_INTERFACE_GROUP_STARTED   "group-started"
 #define NM_SUPPLICANT_INTERFACE_GROUP_FINISHED  "group-finished"
+#define NM_SUPPLICANT_INTERFACE_GO_NEG_REQEUST  "go-neg-request"
+#define NM_SUPPLICANT_INTERFACE_GO_NEG_FAILURE  "go-neg-failure"
 
 typedef struct _NMSupplicantInterfaceClass NMSupplicantInterfaceClass;
 

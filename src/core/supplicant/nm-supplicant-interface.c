@@ -79,6 +79,9 @@ enum {
     WPS_CREDENTIALS, /* WPS credentials received */
     GROUP_STARTED,   /* a new Group (interface) was created */
     GROUP_FINISHED,  /* a Group (interface) has been finished */
+    PD_REQ,          /* a peer wants to qualify our discovery - promt for PIN if necessary */
+    GO_NEG_REQ,      /* A peer asked us to form a group with them. Wow */
+    GO_NEG_FAIL,     /* A GO Negotiation has failed */
     LAST_SIGNAL
 };
 
@@ -2024,7 +2027,7 @@ _p2p_call_set_device_config(NMSupplicantInterface *self, P2pConfigData *p2p_conf
 
     g_variant_builder_add(&variantBuilder, "{sv}", "PrimaryDeviceType", g_variant_new("ay", &typeBuilder));
     g_variant_builder_unref(&typeBuilder);
-
+    
     uint8_t in_our_ip[4] = {10, 5, 5, 1};
     uint8_t in_subnet_mask[4] = {255, 255, 255, 0};
     uint8_t in_peer_ip[4] = {10, 5, 5, 100};
@@ -3373,6 +3376,7 @@ _signal_handle(NMSupplicantInterface *self,
                 gs_unref_object NMSupplicantInterface *iface = NULL;
                 const char                            *group_path;
                 const char                            *iface_path;
+                const char                            *group_role;
                 GVariant                              *v_v = NULL;
 
                 g_variant_get(parameters, "(@a{sv})", &args);
@@ -3393,6 +3397,10 @@ _signal_handle(NMSupplicantInterface *self,
                               "aborting further processing.");
                         return;
                     }
+                }
+
+                if (!g_variant_lookup(args, "role", "&s", &group_role)) {
+                    return;
                 }
 
                 v_v = g_variant_lookup_value(args, "IpAddr", G_VARIANT_TYPE_BYTESTRING);
@@ -3455,10 +3463,15 @@ _signal_handle(NMSupplicantInterface *self,
 
         if(nm_streq(signal_name, "GONegotiationRequest")) {
             if(g_variant_is_of_type(parameters, G_VARIANT_TYPE("(oqy)"))){
-                _LOGD("P2P: Got GONegotiationRequest Signal!");
-                nm_auto_ref_string NMRefString *peer_path = NULL;
-                g_variant_get(parameters, "(&o)", &path);
+                const char  *peer_path;
+                guint        pwd_id;
+                guint        peer_go_intent;
 
+                _LOGD("P2P: Got GONegotiationRequest Signal!");
+
+                g_variant_get(parameters, "(&oqy)", &peer_path, &pwd_id, &peer_go_intent);
+
+                g_signal_emit(self, signals[GO_NEG_REQ], 0, peer_path, pwd_id, peer_go_intent);
                 
 
             }
@@ -3987,4 +4000,17 @@ nm_supplicant_interface_class_init(NMSupplicantInterfaceClass *klass)
                                            G_TYPE_NONE,
                                            1,
                                            G_TYPE_STRING);
+
+    signals[GO_NEG_REQ] = g_signal_new(NM_SUPPLICANT_INTERFACE_GO_NEG_REQEUST,
+                                     G_OBJECT_CLASS_TYPE(object_class),
+                                     G_SIGNAL_RUN_LAST,
+                                     0,
+                                     NULL,
+                                     NULL,
+                                     NULL,
+                                     G_TYPE_NONE,
+                                     3,
+                                     G_TYPE_STRING,
+                                     G_TYPE_INT,
+                                     G_TYPE_INT);
 }

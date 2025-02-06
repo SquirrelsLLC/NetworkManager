@@ -500,8 +500,8 @@ act_stage2_config(NMDevice *device, NMDeviceStateReason *out_failure_reason)
         wfd_ies = nm_setting_wifi_p2p_get_wfd_ies(s_wifi_p2p);
         nm_supplicant_manager_set_wfd_ies(priv->sup_mgr, wfd_ies);
 
-        _LOGD(LOGD_P2P,"BMEEK :: Device P2P :: Act_Stage 2 ::  Attempting to set wpa_supplicant WPS data");
-        nm_supplicant_interface_create_p2p_device_config(priv->mgmt_iface,"01","01","PIN,PBC",0);
+        _LOGD(LOGD_P2P,"BMEEK :: Device P2P :: Act_Stage 2 ::  Attempting to set wpa_supplicant P2P data");
+        nm_supplicant_interface_create_p2p_device_config(priv->mgmt_iface,"01","01","pbc",7);
 
         _LOGD(LOGD_P2P,"BMEEK :: Device P2P :: Act_Stage 2 ::  Activating Start Find on management interface");
         nm_supplicant_interface_p2p_start_find(priv->mgmt_iface, 42);
@@ -952,6 +952,28 @@ supplicant_iface_group_started_cb(NMSupplicantInterface *iface,
 }
 
 static void
+supplicant_iface_go_neg_request_cb(NMSupplicantInterface *iface, char *peer_path, guint pwd_id, guint peer_go_intent, void *user_data)
+{
+    NMDeviceWifiP2P *self = NM_DEVICE_WIFI_P2P(user_data);
+    NMDeviceWifiP2PPrivate    *priv;
+    NMSupplicantInterfaceState state;
+
+    g_return_if_fail(self);
+
+    priv = NM_DEVICE_WIFI_P2P_GET_PRIVATE(self);
+
+    _LOGD(LOGD_DEVICE | LOGD_WIFI, "Got P2P Go Negotiation Request from %s", peer_path);
+
+    _LOGD(LOGD_DEVICE | LOGD_P2P, "Attempting to connect with peer...");
+    nm_supplicant_interface_p2p_connect(priv->mgmt_iface,peer_path,"pbc",NULL);
+
+    /* Set up a timeout on the connect attempt */
+    if (priv->sup_timeout_id == 0) {
+        priv->sup_timeout_id = g_timeout_add_seconds(60, supplicant_connection_timeout_cb, self);
+    }
+}
+
+static void
 supplicant_group_interface_release(NMDeviceWifiP2P *self)
 {
     NMDeviceWifiP2PPrivate *priv = NM_DEVICE_WIFI_P2P_GET_PRIVATE(self);
@@ -1236,6 +1258,10 @@ nm_device_wifi_p2p_set_mgmt_iface(NMDeviceWifiP2P *self, NMSupplicantInterface *
     g_signal_connect(priv->mgmt_iface,
                      NM_SUPPLICANT_INTERFACE_GROUP_STARTED,
                      G_CALLBACK(supplicant_iface_group_started_cb),
+                     self);
+    g_signal_connect(priv->mgmt_iface,
+                     NM_SUPPLICANT_INTERFACE_GO_NEG_REQEUST,
+                     G_CALLBACK(supplicant_iface_go_neg_request_cb),
                      self);
 done:
     nm_device_queue_recheck_available(NM_DEVICE(self),
