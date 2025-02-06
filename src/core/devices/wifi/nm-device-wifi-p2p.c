@@ -167,22 +167,25 @@ check_connection_peer_joined(NMDeviceWifiP2P *device)
 
     if (!conn || !priv->group_iface)
         return FALSE;
-
+#if 0
     /* Comparing the object path found on the group_iface with the peers
      * found on the mgmt_iface is legal. */
     group = nm_supplicant_interface_get_p2p_group_path(priv->group_iface);
     if (!group)
         return FALSE;
 
-    /* NOTE: We currently only support connections to a specific peer */
     peer = nm_wifi_p2p_peers_find_first_compatible(&priv->peers_lst_head, conn, FALSE);
-    if (!peer)
-        return FALSE;
+    
+    if(priv->wfd_device_mode != _NM_WIFI_P2P_WFD_DEVICE_MODE_SINK) {
+        /* NOTE: We currently only support connections to a specific peer */
+        if (!peer)
+            return FALSE;
+    }
 
     groups = nm_wifi_p2p_peer_get_groups(peer);
     if (!groups || !g_strv_contains(groups, group))
         return FALSE;
-
+#endif
     return TRUE;
 }
 
