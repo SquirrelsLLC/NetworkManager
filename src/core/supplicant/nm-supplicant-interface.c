@@ -1715,7 +1715,7 @@ _wps_handle_set_pc_cb(GVariant *res, GError *error, gpointer user_data)
     priv     = NM_SUPPLICANT_INTERFACE_GET_PRIVATE(self);
 
     if (res)
-        _LOGT("wps: ProcessCredentials successfully set, starting...");
+        _LOGD("wps: ProcessCredentials successfully set, starting...");
     else
         _LOGW("wps: ProcessCredentials failed to set (%s), starting...", error->message);
 
@@ -1801,7 +1801,7 @@ _wps_handle_cancel_cb(GObject *source, GAsyncResult *result, gpointer user_data)
     if (!self) {
         _wps_data_free(wps_data, dbus_connection);
         if (res)
-            _LOGT("wps: cancel completed successfully, after supplicant interface is gone");
+            _LOGD("wps: cancel completed successfully, after supplicant interface is gone");
         else
             _LOGW("wps: cancel failed (%s), after supplicant interface is gone", error->message);
         return;
@@ -1815,14 +1815,14 @@ _wps_handle_cancel_cb(GObject *source, GAsyncResult *result, gpointer user_data)
         priv->wps_data = NULL;
         _wps_data_free(wps_data, dbus_connection);
         if (res)
-            _LOGT("wps: cancel completed successfully");
+            _LOGD("wps: cancel completed successfully");
         else
             _LOGW("wps: cancel failed (%s)", error->message);
         return;
     }
 
     if (res)
-        _LOGT("wps: cancel completed successfully, setting ProcessCredentials now...");
+        _LOGD("wps: cancel completed successfully, setting ProcessCredentials now...");
     else
         _LOGW("wps: cancel failed (%s), setting ProcessCredentials now...", error->message);
 
@@ -1872,7 +1872,7 @@ _wps_start(NMSupplicantInterface *self, const char *type, const char *bssid, con
     }
 
     if (!type || wps_data->needs_cancelling) {
-        _LOGT("wps: cancel %senrollment...", wps_data->needs_cancelling ? "previous " : "");
+        _LOGD("wps: cancel %senrollment...", wps_data->needs_cancelling ? "previous " : "");
 
         wps_data->is_cancelling    = TRUE;
         wps_data->needs_cancelling = FALSE;
@@ -1892,7 +1892,7 @@ _wps_start(NMSupplicantInterface *self, const char *type, const char *bssid, con
         return;
     }
 
-    _LOGT("wps: setting ProcessCredentials...");
+    _LOGD("wps: setting ProcessCredentials...");
     _wps_call_set_pc(self, wps_data);
 }
 
@@ -3457,6 +3457,7 @@ _signal_handle(NMSupplicantInterface *self,
                 const char                            *iface_path;
                 const char                            *group_role;
                 GVariant                              *v_v = NULL;
+                GVariant                              *u_v = NULL;
 
                 g_variant_get(parameters, "(@a{sv})", &args);
                 if (!g_variant_lookup(args, "group_object", "&o", &group_path))
@@ -3509,7 +3510,47 @@ _signal_handle(NMSupplicantInterface *self,
                         _LOGW("P2P: GroupStarted signaled invalid IP Address information");
                     }
                 }
+#if 0
+                u_v = g_variant_lookup_value(args, "IpAddrGo", G_VARIANT_TYPE_BYTESTRING);
+                if(u_v) {
+                    const guint8 *addr_data;
+                    gsize         addr_len  = 0;
+                    const guint8 *mask_data = NULL;
+                    gsize         mask_len  = 0;
 
+                    /* The address is passed in network-byte-order */
+                    addr_data = g_variant_get_fixed_array(u_v, &addr_len, 1);
+
+                    if(!addr_data || addr_len == 0) {
+                        const char *ip_str[INET6_ADDRSTRLEN];
+                        if(addr_len == 4) {
+                            inet_ntop(AF_INET, addr_data, &ip_str, &addr_len);
+                            _LOGD("Extracted IPAddrGo IPv4 : %s", ip_str);
+                        } else if (addr_len == 16) {
+                            inet_ntop(AF_INET6, addr_data, &ip_str, &addr_len);
+                            _LOGD("Extracted IPAddrGo IPv6 : %s", ip_str);
+                        } else {
+                            _LOGD("Extracted IPAddrGo unkown format - length : %i", &addr_len);
+                        }
+
+                        u_v = g_variant_lookup_value(args, "IpAddrMask", G_VARIANT_TYPE_BYTESTRING);
+                        if (u_v)
+                            mask_data = g_variant_get_fixed_array(u_v, &mask_len, 1);
+
+                        if (addr_len == NM_AF_INET_SIZE && mask_len == NM_AF_INET_SIZE) {
+                            guint32 netmask;
+
+                            memcpy(&netmask, mask_data, NM_AF_INET_SIZE);
+                        }
+
+                    } else {
+                        _LOGD("Invalid or empty IpAddrGo GVariant");
+                    }
+
+                } else {
+                    _LOGW("P2P: GroupStarted signaled empty or invalid GO IP Address information");
+                }
+#endif
                 /* Signal existence of the (new) interface. */
                 g_signal_emit(self, signals[GROUP_STARTED], 0, iface);
             }
