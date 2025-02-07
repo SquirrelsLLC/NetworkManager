@@ -645,6 +645,7 @@ act_stage3_ip_config(NMDevice *device, int addr_family)
     if (IS_IPv4 && NM_IN_STRSET(method, NM_SETTING_IP4_CONFIG_METHOD_AUTO) && priv->group_iface
         && !nm_supplicant_interface_get_p2p_group_owner(priv->group_iface)) {
         in_addr_t addr;
+        in_addr_t go_addr;
         guint8    plen;
 
         if (nm_supplicant_interface_get_p2p_assigned_addr(priv->group_iface, &addr, &plen)) {
@@ -652,12 +653,24 @@ act_stage3_ip_config(NMDevice *device, int addr_family)
             NMPlatformIP4Address                    address = {
                                    .addr_source = NM_IP_CONFIG_SOURCE_DHCP,
             };
-
+            
             nm_platform_ip4_address_set_addr(&address, addr, plen);
 
             l3cd = nm_device_create_l3_config_data(device, NM_IP_CONFIG_SOURCE_DHCP);
             nm_l3_config_data_add_address_4(l3cd, &address);
 
+            if(nm_supplicant_interface_get_p2p_assigned_go(priv->group_iface, &go_addr)) {
+                const NMPlatformIP4Route r = {
+                    .rt_source     = NM_IP_CONFIG_SOURCE_DHCP,
+                    .gateway       = go_addr,
+                    .table_any     = TRUE,
+                    .table_coerced = 0,
+                    .metric_any    = TRUE,
+                    .metric        = 0,
+                };
+                nm_l3_config_data_add_route_4(l3cd, &r);
+            }
+            
             nm_device_devip_set_state(device, AF_INET, NM_DEVICE_IP_STATE_READY, l3cd);
 
             /* This just disables the addressing indicator. */

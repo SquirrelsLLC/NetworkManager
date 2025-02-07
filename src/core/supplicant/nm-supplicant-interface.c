@@ -137,6 +137,7 @@ typedef struct _NMSupplicantInterfacePrivate {
 
     in_addr_t p2p_assigned_addr;
     guint8    p2p_assigned_plen;
+    in_addr_t p2p_assigned_go;
 
     gint64 last_scan_msec;
 
@@ -3362,6 +3363,14 @@ _set_p2p_assigned_addr(NMSupplicantInterface *self, gconstpointer addr, guint8 p
 }
 
 static void
+_set_p2p_assigned_go(NMSupplicantInterface *self, gconstpointer addr) {
+
+    NMSupplicantInterfacePrivate *priv = NM_SUPPLICANT_INTERFACE_GET_PRIVATE(self);
+
+    nm_ip_addr_set(AF_INET, &priv->p2p_assigned_go, addr);
+}
+
+static void
 _signal_handle(NMSupplicantInterface *self,
                const char            *signal_interface_name,
                const char            *signal_name,
@@ -3510,7 +3519,7 @@ _signal_handle(NMSupplicantInterface *self,
                         _LOGW("P2P: GroupStarted signaled invalid IP Address information");
                     }
                 }
-#if 0
+
                 u_v = g_variant_lookup_value(args, "IpAddrGo", G_VARIANT_TYPE_BYTESTRING);
                 if(u_v) {
                     const guint8 *addr_data;
@@ -3520,17 +3529,23 @@ _signal_handle(NMSupplicantInterface *self,
 
                     /* The address is passed in network-byte-order */
                     addr_data = g_variant_get_fixed_array(u_v, &addr_len, 1);
-
+                    if(addr_len == NM_AF_INET_SIZE) {
+                        _LOGD("GroupStarted signal included IpAddrGo address");
+                        _set_p2p_assigned_go(iface,addr_data);
+                    } else {
+                        _LOGD("Invalid IpAddrGo Length!");
+                    }
+#if 0
                     if(!addr_data || addr_len == 0) {
-                        const char *ip_str[INET6_ADDRSTRLEN];
+                        char *ip_str;
                         if(addr_len == 4) {
-                            inet_ntop(AF_INET, addr_data, &ip_str, &addr_len);
+                            inet_ntop(AF_INET, addr_data, ip_str, INET6_ADDRSTRLEN);
                             _LOGD("Extracted IPAddrGo IPv4 : %s", ip_str);
                         } else if (addr_len == 16) {
-                            inet_ntop(AF_INET6, addr_data, &ip_str, &addr_len);
+                            inet_ntop(AF_INET6, addr_data, ip_str, INET6_ADDRSTRLEN);
                             _LOGD("Extracted IPAddrGo IPv6 : %s", ip_str);
                         } else {
-                            _LOGD("Extracted IPAddrGo unkown format - length : %i", &addr_len);
+                            _LOGD("Extracted IPAddrGo unkown format - length : %i", addr_len);
                         }
 
                         u_v = g_variant_lookup_value(args, "IpAddrMask", G_VARIANT_TYPE_BYTESTRING);
@@ -3542,15 +3557,14 @@ _signal_handle(NMSupplicantInterface *self,
 
                             memcpy(&netmask, mask_data, NM_AF_INET_SIZE);
                         }
-
                     } else {
-                        _LOGD("Invalid or empty IpAddrGo GVariant");
+                        _LOGD("Invalid or empty IpAddrGo GVariant:\n%s",g_variant_print(u_v,TRUE));
                     }
-
+#endif
                 } else {
                     _LOGW("P2P: GroupStarted signaled empty or invalid GO IP Address information");
                 }
-#endif
+
                 /* Signal existence of the (new) interface. */
                 g_signal_emit(self, signals[GROUP_STARTED], 0, iface);
             }
@@ -3665,6 +3679,19 @@ nm_supplicant_interface_get_p2p_assigned_addr(NMSupplicantInterface *self,
     if (plen)
         *plen = priv->p2p_assigned_plen;
 
+    return TRUE;
+}
+
+gboolean nm_supplicant_interface_get_p2p_assigned_go(NMSupplicantInterface *self, in_addr_t *addr) {
+
+    NMSupplicantInterfacePrivate *priv = NM_SUPPLICANT_INTERFACE_GET_PRIVATE(self);
+
+    if(nm_ip_addr_is_null(AF_INET, &priv->p2p_assigned_go))
+        return FALSE;
+    
+    if(addr)
+        nm_ip_addr_set(AF_INET, addr, &priv->p2p_assigned_go);
+    
     return TRUE;
 }
 

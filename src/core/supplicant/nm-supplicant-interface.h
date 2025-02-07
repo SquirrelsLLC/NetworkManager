@@ -170,6 +170,8 @@ gboolean nm_supplicant_interface_get_p2p_assigned_addr(NMSupplicantInterface *se
                                                        in_addr_t             *assigned_addr,
                                                        guint8                *plen);
 
+gboolean nm_supplicant_interface_get_p2p_assigned_go(NMSupplicantInterface *self, in_addr_t *assigned_go);
+
 void nm_supplicant_interface_p2p_start_find(NMSupplicantInterface *self, guint timeout);
 void nm_supplicant_interface_p2p_stop_find(NMSupplicantInterface *self);
 
