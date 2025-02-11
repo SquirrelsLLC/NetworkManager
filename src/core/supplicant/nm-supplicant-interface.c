@@ -2037,7 +2037,7 @@ _p2p_call_set_device_config(NMSupplicantInterface *self, P2pConfigData *p2p_conf
                                 p2p_config_data);
     
 
-    // BMEEK: Build G_Variant out of p2p_config_data. Also build out the rest of the p2p IEs and Vender Extension IEs
+    // BMEEK: Build G_Variant out of p2p_config_data. Also build out the rest of the p2p IEs and Vendor Extension IEs
 
     // Set the device name
     g_variant_builder_init(&variantBuilder,G_VARIANT_TYPE_VARDICT);
@@ -2102,7 +2102,7 @@ _p2p_call_set_device_config(NMSupplicantInterface *self, P2pConfigData *p2p_conf
     g_variant_builder_unref(&typeBuilder);
     */
 
-   // Vender Extension Attributes
+   // Vendor Extension Attributes
     g_variant_builder_init(&typeBuilder, G_VARIANT_TYPE_BYTESTRING);
     // Vendor Extension subelement: Microsoft OUI
     g_variant_builder_add(&typeBuilder, "y", 0x00);
