@@ -167,7 +167,7 @@ check_connection_peer_joined(NMDeviceWifiP2P *device)
 
     if (!conn || !priv->group_iface)
         return FALSE;
-#if 0
+
     /* Comparing the object path found on the group_iface with the peers
      * found on the mgmt_iface is legal. */
     group = nm_supplicant_interface_get_p2p_group_path(priv->group_iface);
@@ -175,17 +175,14 @@ check_connection_peer_joined(NMDeviceWifiP2P *device)
         return FALSE;
 
     peer = nm_wifi_p2p_peers_find_first_compatible(&priv->peers_lst_head, conn, FALSE);
-    
-    if(priv->wfd_device_mode != _NM_WIFI_P2P_WFD_DEVICE_MODE_SINK) {
-        /* NOTE: We currently only support connections to a specific peer */
-        if (!peer)
-            return FALSE;
-    }
+
+    /* NOTE: We currently only support connections to a specific peer */
+    if (!peer)
+        return FALSE;
 
     groups = nm_wifi_p2p_peer_get_groups(peer);
     if (!groups || !g_strv_contains(groups, group))
         return FALSE;
-#endif
     return TRUE;
 }
 
@@ -973,12 +970,39 @@ supplicant_iface_go_neg_request_cb(NMSupplicantInterface *iface, char *peer_path
     NMDeviceWifiP2P *self = NM_DEVICE_WIFI_P2P(user_data);
     NMDeviceWifiP2PPrivate    *priv;
     NMSupplicantInterfaceState state;
+    NMSettingWifiP2P *s_wifi_p2p;
+    NMConnection *connection;
+    NMWifiP2PPeer *peer;
+    const char       *setting_peer;
 
     g_return_if_fail(self);
 
     priv = NM_DEVICE_WIFI_P2P_GET_PRIVATE(self);
 
-    _LOGD(LOGD_DEVICE | LOGD_WIFI, "Got P2P Go Negotiation Request from %s", peer_path);
+    _LOGD(LOGD_P2P, "Got P2P Go Negotiation Request from %s", peer_path);
+    peer = nm_wifi_p2p_peers_find_by_supplicant_path(&priv->peers_lst_head,peer_path);
+    if (!peer) {
+        _LOGD(LOGD_P2P, "Go-Negotiation-Request :: Peer is unkown!");
+        
+    } else {
+        setting_peer = nm_wifi_p2p_peer_get_address(peer);
+        /* Add a Wi-Fi P2P setting if one doesn't exist yet */
+        connection = nm_device_get_applied_connection(NM_DEVICE(self));
+        if(connection){
+            s_wifi_p2p = _nm_connection_ensure_setting(connection, NM_TYPE_SETTING_WIFI_P2P);
+            if(s_wifi_p2p) {
+                g_object_set(G_OBJECT(s_wifi_p2p), NM_SETTING_WIFI_P2P_PEER, setting_peer, NULL);
+                _LOGD(LOGD_P2P, "Adding Peer to connection settings");
+                
+            } else {
+                _LOGD(LOGD_P2P, "Unable to ensure WifiP2P Settings exists in applied connection!!!");
+            }
+        } else {
+            _LOGD(LOGD_P2P,"Unable to fetch applied connection!!!");
+        }
+    }
+
+
 
     _LOGD(LOGD_DEVICE | LOGD_P2P, "Attempting to connect with peer...");
     nm_supplicant_interface_p2p_connect(priv->mgmt_iface,peer_path,"pbc",NULL);
