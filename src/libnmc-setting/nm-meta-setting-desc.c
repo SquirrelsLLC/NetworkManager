@@ -7983,6 +7983,9 @@ static const NMMetaPropertyInfo *const property_infos_WIFI_P2P[] = {
     PROPERTY_INFO_WITH_DESC (NM_SETTING_WIFI_P2P_WFD_IES,
         .property_type =                &_pt_gobject_bytes,
     ),
+    PROPERTY_INFO_WITH_DESC (NM_SETTING_WIFI_P2P_WFD_VENDOR_EXTENSIONS,
+        .property_type =                &_pt_gobject_bytes,
+    ),
     PROPERTY_INFO_WITH_DESC (NM_SETTING_WIFI_P2P_WFD_DEVICE_MODE,
         .property_type =                &_pt_gobject_string,
         .property_typ_data = DEFINE_PROPERTY_TYP_DATA (
@@ -7991,6 +7994,12 @@ static const NMMetaPropertyInfo *const property_infos_WIFI_P2P[] = {
                                                       NM_SETTING_WIFI_P2P_MODE_SINK
                                         ),
         ),
+    ),
+    PROPERTY_INFO_WITH_DESC (NM_SETTING_WIFI_P2P_WFD_HOST_NAME,
+        .property_type =                &_pt_gobject_string,
+    ),
+    PROPERTY_INFO_WITH_DESC (NM_SETTING_WIFI_P2P_WFD_DEVICE_CATEGORY,
+        .property_type =                &_pt_gobject_bytes,
     ),
 
     NULL

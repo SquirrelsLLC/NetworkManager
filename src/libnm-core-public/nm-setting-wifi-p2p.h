@@ -34,6 +34,8 @@ G_BEGIN_DECLS
  * The mac address of the peer to connect to.
  */
 #define NM_SETTING_WIFI_P2P_PEER                "peer"
+
+#define NM_SETTING_WIFI_P2P_WPS_METHOD          "wps-method"
 /**
  * NM_SETTING_WIFI_P2P_WFD_IES:
  *
@@ -41,12 +43,29 @@ G_BEGIN_DECLS
  */
 #define NM_SETTING_WIFI_P2P_WFD_IES             "wfd-ies"
 /**
+ * NM_SETTING_WIFI_P2P_WFD_VENDOR_EXTENSIONS:
+ *
+ * The vendor extension IEs to include in the p2p beacon
+ */
+#define NM_SETTING_WIFI_P2P_WFD_VENDOR_EXTENSIONS "wfd-vendor-extensions"
+/**
  * NM_SETTING_WIFI_P2P_WFD_DEVICE_MODE:
  *
  * The Wi-Fi Display Device mode to operate in.
  */
 #define NM_SETTING_WIFI_P2P_WFD_DEVICE_MODE     "wfd-device-mode"
-#define NM_SETTING_WIFI_P2P_WPS_METHOD          "wps-method"
+/**
+ * NM_SETTING_WIFI_P2P_WFD_HOST_NAME:
+ *
+ * The Wi-Fi Display device name to advertise.
+ */
+#define NM_SETTING_WIFI_P2P_WFD_HOST_NAME       "wfd-host-name"
+/**
+ * NM_SETTING_WIFI_P2P_WFD_DEVICE_CATEGORY:
+ *
+ * The Wi-Fi Alliance WFA Device Type Code to use in the discovery beacon
+ */
+#define NM_SETTING_WIFI_P2P_WFD_DEVICE_CATEGORY "wfd-device-category"
 
 
 /**
@@ -95,7 +114,16 @@ NM_AVAILABLE_IN_1_16
 GBytes *nm_setting_wifi_p2p_get_wfd_ies(NMSettingWifiP2P *setting);
 
 NM_AVAILABLE_IN_1_36
+GBytes *nm_setting_wifi_p2p_get_wfd_device_category(NMSettingWifiP2P *setting);
+
+NM_AVAILABLE_IN_1_36
 const char *nm_setting_wifi_p2p_get_wfd_device_mode(NMSettingWifiP2P * setting);
+
+NM_AVAILABLE_IN_1_36
+GBytes *nm_setting_wifi_p2p_get_vendor_extension_ies(NMSettingWifiP2P *setting);
+
+NM_AVAILABLE_IN_1_36
+const char *nm_setting_wifi_p2p_get_wfd_host_name(NMSettingWifiP2P *setting);
 
 G_END_DECLS
 

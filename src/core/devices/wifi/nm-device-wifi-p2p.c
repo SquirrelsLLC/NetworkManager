@@ -470,7 +470,10 @@ act_stage2_config(NMDevice *device, NMDeviceStateReason *out_failure_reason)
     NMSettingWifiP2P       *s_wifi_p2p;
     NMWifiP2PPeer          *peer;
     GBytes                 *wfd_ies;
-    const char             *wfd_mode;
+    GBytes                 *wfd_vendor_extensions;
+    GBytes                 *wfd_device_category;
+    const char             *wfd_host_name;
+    const char             *wfd_config_methods;
     
     _LOGD(LOGD_P2P,"BMEEK :: Device P2P :: Act_Stage 2 :: Config!");
     
@@ -492,7 +495,7 @@ act_stage2_config(NMDevice *device, NMDeviceStateReason *out_failure_reason)
     // Not that it would really matter, but if this is not a WFD p2p device, we don't need to set any WFD IEs
     if(priv->wfd_device_mode != _NM_WIFI_P2P_WFD_DEVICE_MODE_NONE) {
 
-        _LOGD(LOGD_P2P,"BMEEK :: Device P2P :: Act_Stage 2 ::  This is a WFD P2P device, calling supplicant_manager to set global WFD IEs in wpa_supplicant");
+        _LOGD(LOGD_P2P,"WFD P2P :: Act_Stage 2 ::  This is a WFD P2P device, calling supplicant_manager to set global WFD IEs in wpa_supplicant");
 
         /* Set the WFD IEs before trying to establish the connection. */
         s_wifi_p2p = NM_SETTING_WIFI_P2P(nm_connection_get_setting(connection, NM_TYPE_SETTING_WIFI_P2P));
@@ -500,8 +503,19 @@ act_stage2_config(NMDevice *device, NMDeviceStateReason *out_failure_reason)
         wfd_ies = nm_setting_wifi_p2p_get_wfd_ies(s_wifi_p2p);
         nm_supplicant_manager_set_wfd_ies(priv->sup_mgr, wfd_ies);
 
+        wfd_vendor_extensions = nm_setting_wifi_p2p_get_vendor_extension_ies(s_wifi_p2p);
+        _LOGD(LOGD_P2P, "Vender Extension Len: %i",g_bytes_get_size(wfd_vendor_extensions));
+        wfd_device_category = nm_setting_wifi_p2p_get_wfd_device_category(s_wifi_p2p);
+        _LOGD(LOGD_P2P, "Device Category Len: %i",g_bytes_get_size(wfd_device_category));
+        wfd_host_name = nm_setting_wifi_p2p_get_wfd_host_name(s_wifi_p2p);
+
         _LOGD(LOGD_P2P,"BMEEK :: Device P2P :: Act_Stage 2 ::  Attempting to set wpa_supplicant P2P data");
-        nm_supplicant_interface_create_p2p_device_config(priv->mgmt_iface,"01","01","pbc",7);
+        nm_supplicant_interface_create_p2p_device_config(priv->mgmt_iface,
+                                                        "pbc",
+                                                        wfd_host_name,
+                                                        wfd_device_category,
+                                                        wfd_vendor_extensions,
+                                                        7);
 
         _LOGD(LOGD_P2P,"BMEEK :: Device P2P :: Act_Stage 2 ::  Activating Start Find on management interface");
         nm_supplicant_interface_p2p_start_find(priv->mgmt_iface, 42);

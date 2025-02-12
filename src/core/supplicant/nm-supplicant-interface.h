@@ -196,7 +196,7 @@ void nm_supplicant_interface_enroll_wps(NMSupplicantInterface *self,
 
 void nm_supplicant_interface_cancel_wps(NMSupplicantInterface *self);
 
-void nm_supplicant_interface_create_p2p_device_config(NMSupplicantInterface *self, char *primaryDeviceType, char *primarySubType, char *configMethods, guint goIntent);
+void nm_supplicant_interface_create_p2p_device_config(NMSupplicantInterface *self, char *wps_config_methods, char *wfd_host_name, GBytes *wfd_device_category, GBytes *wfd_vendor_extensions, guint goIntent);
 
 NMSupplicantAuthState nm_supplicant_interface_get_auth_state(NMSupplicantInterface *self);
 

@@ -38,16 +38,17 @@ typedef struct {
 
 typedef struct {
     NMSupplicantInterface *self;
-    char                  *primary_type;
-    char                  *sub_type;
+    char                  *host_name;
     char                  *config_methods;
-    // char                  oui; TODO: add OUI parameter. For Wi-Fi Display devices, this value will always be the same though.
+    GBytes                *device_category;
+    GBytes                *vendor_extensions;
     guint                  go_intent;
+
     /* Provision Discovery Singal*/
-    guint                  pd_pin_req_signal_id;
-    GCancellable           *cancellable;
-    bool                   needs_cancelling : 1;
-    bool                   is_cancelling : 1;
+    guint         pd_pin_req_signal_id;
+    GCancellable *cancellable;
+    bool          needs_cancelling : 1;
+    bool          is_cancelling : 1;
 } P2pConfigData;
 
 struct _AddNetworkData;
@@ -1923,31 +1924,27 @@ _p2p_provision_discovery_cb(GDBusConnection *connection,
                             GVariant        *parameters,
                             gpointer         user_data)
 {
-
     // P2pConfigData             *p2p_config_data = user_data;
-    NMSupplicantInterface        *self  = user_data;
+    NMSupplicantInterface *self = user_data;
     // gs_unref_variant GVariant    *props = NULL;
-    char                        *peer_object_path;
-    char                        *generated_pin;
+    char *peer_object_path;
+    char *generated_pin;
 
     // _LOGD("Provision Discovery Signal Callback!");
-    _LOGD("Provision Discovery (%s) Signal Callback!",signal_name);
+    _LOGD("Provision Discovery (%s) Signal Callback!", signal_name);
     // _LOGD("p2p: New P2P Provision Discovery Request Parameters: %s",g_variant_print(parameters, TRUE));
 
-    
-    if(g_variant_is_of_type(parameters, G_VARIANT_TYPE("(os)")))
-    {
+    if (g_variant_is_of_type(parameters, G_VARIANT_TYPE("(os)"))) {
         g_variant_get(parameters, "(&o&s)", &peer_object_path, &generated_pin);
 
     } else {
         _LOGD("Parameters were given in an unexpected format!");
         return;
     }
-    if(generated_pin)
-        _LOGD("p2p: Generated PIN: %s for peer: %s",generated_pin,peer_object_path);
+    if (generated_pin)
+        _LOGD("p2p: Generated PIN: %s for peer: %s", generated_pin, peer_object_path);
 
     // BMEEK: Emit signal, to be picked up by nm-device-wifi-p2p
-
 }
 
 static void
@@ -1957,13 +1954,12 @@ _p2p_handle_set__config_methods_cb(GVariant *res, GError *error, gpointer user_d
     NMSupplicantInterfacePrivate *priv;
     P2pConfigData                *p2p_config_data;
 
-
     if (nm_utils_error_is_cancelled(error))
         return;
 
     p2p_config_data = user_data;
-    self     = p2p_config_data->self;
-    priv = NM_SUPPLICANT_INTERFACE_GET_PRIVATE(self);
+    self            = p2p_config_data->self;
+    priv            = NM_SUPPLICANT_INTERFACE_GET_PRIVATE(self);
 
     _LOGD("Handle p2p_set__config_methods_cb callback!");
 }
@@ -1977,53 +1973,53 @@ _p2p_handle_set_device_config_cb(GVariant *res, GError *error, gpointer user_dat
      * ProvisionDiscoveryRequestDisplayPin
      * ProvisionDiscoveryPBCRequest
      * ProvisionDiscoveryFailure
-     * */ 
+     * */
     NMSupplicantInterface        *self;
     NMSupplicantInterfacePrivate *priv;
     P2pConfigData                *p2p_config_data;
-
 
     if (nm_utils_error_is_cancelled(error))
         return;
 
     p2p_config_data = user_data;
-    self     = p2p_config_data->self;
-    priv = NM_SUPPLICANT_INTERFACE_GET_PRIVATE(self);
+    self            = p2p_config_data->self;
+    priv            = NM_SUPPLICANT_INTERFACE_GET_PRIVATE(self);
 
     _LOGD("Handle p2p_set_device_config callback!");
-    
+
     if (res)
         _LOGD("p2p: set P2PDeviceConfig with success");
     else
         _LOGW("p2p: set P2PDeviceConfig failed with %s", error->message);
-    
+
     // BMEEK: subscribe to the PBC & Failure provision discovery signal as well. We should be conditionally subscribing to these signals based on our supported wpa_s config methods
 
     _LOGD("Subscribing to the ProvisionDiscoveryRequest signals");
 
-    p2p_config_data->pd_pin_req_signal_id = g_dbus_connection_signal_subscribe(priv->dbus_connection,
-                                                             priv->name_owner->str,
-                                                             NM_WPAS_DBUS_IFACE_INTERFACE_P2P_DEVICE,
-                                                             "ProvisionDiscoveryRequestDisplayPin",
-                                                             priv->object_path->str,
-                                                             NULL,
-                                                             G_DBUS_SIGNAL_FLAGS_NONE,
-                                                             _p2p_provision_discovery_cb,
-                                                             self,
-                                                             NULL);
+    p2p_config_data->pd_pin_req_signal_id =
+        g_dbus_connection_signal_subscribe(priv->dbus_connection,
+                                           priv->name_owner->str,
+                                           NM_WPAS_DBUS_IFACE_INTERFACE_P2P_DEVICE,
+                                           "ProvisionDiscoveryRequestDisplayPin",
+                                           priv->object_path->str,
+                                           NULL,
+                                           G_DBUS_SIGNAL_FLAGS_NONE,
+                                           _p2p_provision_discovery_cb,
+                                           self,
+                                           NULL);
 }
 
 static void
 _p2p_call_set_device_config(NMSupplicantInterface *self, P2pConfigData *p2p_config_data)
 {
-    GVariantBuilder variantBuilder;
-    GVariantBuilder typeBuilder;
-    GVariantBuilder typeBuilder2;
+    GVariantBuilder               dict_builder;
+    GVariantBuilder               array_builder;
+    GVariant                     *p2p_config_variant;
     NMSupplicantInterfacePrivate *priv = NM_SUPPLICANT_INTERFACE_GET_PRIVATE(self);
 
-    if(!p2p_config_data->cancellable)
+    if (!p2p_config_data->cancellable)
         p2p_config_data->cancellable = g_cancellable_new();
-
+    //TODO: derive WPAS Config Methods from our real WPS Config Methods?
     _LOGD("DBUS :: setting WPS Config Methods");
     nm_dbus_connection_call_set(priv->dbus_connection,
                                 priv->name_owner->str,
@@ -2035,127 +2031,28 @@ _p2p_call_set_device_config(NMSupplicantInterface *self, P2pConfigData *p2p_conf
                                 NULL,
                                 _p2p_handle_set__config_methods_cb,
                                 p2p_config_data);
-    
-
-    // BMEEK: Build G_Variant out of p2p_config_data. Also build out the rest of the p2p IEs and Vendor Extension IEs
-
-    // Set the device name
-    g_variant_builder_init(&variantBuilder,G_VARIANT_TYPE_VARDICT);
-    g_variant_builder_add(&variantBuilder, "{sv}", "DeviceName", g_variant_new("s", "Reflector Miracast"));
-    // Automatically accept persistent reconnects
-    g_variant_builder_add(&variantBuilder, "{sv}", "PersistentReconnect", g_variant_new("b", 1));
-
-    // Build primary device type - 7-0050F204-1 - it's an ay
-    // wps_dev_type_str2bin says 7 -> Big Ending 16, hex->bin, BigEnding 16
-    g_variant_builder_init(&typeBuilder,G_VARIANT_TYPE_BYTESTRING);
-    g_variant_builder_add(&typeBuilder, "y", 0);
-    g_variant_builder_add(&typeBuilder, "y", 1);
-    g_variant_builder_add(&typeBuilder, "y", 0x00);
-    g_variant_builder_add(&typeBuilder, "y", 0x50);
-    g_variant_builder_add(&typeBuilder, "y", 0xF2);
-    g_variant_builder_add(&typeBuilder, "y", 0x04);
-    g_variant_builder_add(&typeBuilder, "y", 0);
-    g_variant_builder_add(&typeBuilder, "y", 1);
-
-    g_variant_builder_add(&variantBuilder, "{sv}", "PrimaryDeviceType", g_variant_new("ay", &typeBuilder));
-    g_variant_builder_unref(&typeBuilder);
-    
-    /* These parameters are only set if EAPOL is supported
-    uint8_t in_our_ip[4] = {10, 5, 5, 1};
-    uint8_t in_subnet_mask[4] = {255, 255, 255, 0};
-    uint8_t in_peer_ip[4] = {10, 5, 5, 100};
-
-    g_variant_builder_init(&typeBuilder,G_VARIANT_TYPE_BYTESTRING);
-    g_variant_builder_add(&typeBuilder, "y", in_our_ip[0]);
-    g_variant_builder_add(&typeBuilder, "y", in_our_ip[1]);
-    g_variant_builder_add(&typeBuilder, "y", in_our_ip[2]);
-    g_variant_builder_add(&typeBuilder, "y", in_our_ip[3]);
-
-    g_variant_builder_add(&variantBuilder, "{sv}", "IpAddrGo", g_variant_new("ay", &typeBuilder));
-    g_variant_builder_unref(&typeBuilder);
-
-    g_variant_builder_init(&typeBuilder,G_VARIANT_TYPE_BYTESTRING);
-    g_variant_builder_add(&typeBuilder, "y", in_subnet_mask[0]);
-    g_variant_builder_add(&typeBuilder, "y", in_subnet_mask[1]);
-    g_variant_builder_add(&typeBuilder, "y", in_subnet_mask[2]);
-    g_variant_builder_add(&typeBuilder, "y", in_subnet_mask[3]);
-
-    g_variant_builder_add(&variantBuilder, "{sv}", "IpAddrMask", g_variant_new("ay", &typeBuilder));
-    g_variant_builder_unref(&typeBuilder);
-
-    g_variant_builder_init(&typeBuilder,G_VARIANT_TYPE_BYTESTRING);
-    g_variant_builder_add(&typeBuilder, "y", in_peer_ip[0]);
-    g_variant_builder_add(&typeBuilder, "y", in_peer_ip[1]);
-    g_variant_builder_add(&typeBuilder, "y", in_peer_ip[2]);
-    g_variant_builder_add(&typeBuilder, "y", in_peer_ip[3]);
-
-    g_variant_builder_add(&variantBuilder, "{sv}", "IpAddrStart", g_variant_new("ay", &typeBuilder));
-    g_variant_builder_unref(&typeBuilder);
-
-    g_variant_builder_init(&typeBuilder,G_VARIANT_TYPE_BYTESTRING);
-    g_variant_builder_add(&typeBuilder, "y", in_peer_ip[0]);
-    g_variant_builder_add(&typeBuilder, "y", in_peer_ip[1]);
-    g_variant_builder_add(&typeBuilder, "y", in_peer_ip[2]);
-    g_variant_builder_add(&typeBuilder, "y", in_peer_ip[3] + 10);
-
-    g_variant_builder_add(&variantBuilder, "{sv}", "IpAddrEnd", g_variant_new("ay", &typeBuilder));
-    g_variant_builder_unref(&typeBuilder);
-    */
-
-   // Vendor Extension Attributes
-    g_variant_builder_init(&typeBuilder, G_VARIANT_TYPE_BYTESTRING);
-    // Vendor Extension subelement: Microsoft OUI
-    g_variant_builder_add(&typeBuilder, "y", 0x00);
-    g_variant_builder_add(&typeBuilder, "y", 0x01);
-    g_variant_builder_add(&typeBuilder, "y", 0x37);
-    // Vendor Extension subelement: MICE Capability
-    g_variant_builder_add(&typeBuilder, "y", 0x20);
-    g_variant_builder_add(&typeBuilder, "y", 0x01);
-    // Len 1
-    g_variant_builder_add(&typeBuilder, "y", 0x00);
-    g_variant_builder_add(&typeBuilder, "y", 0x01);
-    // MICE disabled
-    g_variant_builder_add(&typeBuilder, "y", 0x04);
-    // Vendor Extension subelement: Host Name
-    g_variant_builder_add(&typeBuilder, "y", 0x20);
-    g_variant_builder_add(&typeBuilder, "y", 0x02);
-    // Len 18
-    g_variant_builder_add(&typeBuilder, "y", 0x00);
-    g_variant_builder_add(&typeBuilder, "y", 0x12);
-    //"Reflector Miracast" [18] 52 65 66 6C 65 63 74 6F 72 20 4D 69 72 61 63 61 73 74
-    g_variant_builder_add(&typeBuilder, "y", 0x52);
-    g_variant_builder_add(&typeBuilder, "y", 0x65);
-    g_variant_builder_add(&typeBuilder, "y", 0x66);
-    g_variant_builder_add(&typeBuilder, "y", 0x6C);
-    g_variant_builder_add(&typeBuilder, "y", 0x65);
-    g_variant_builder_add(&typeBuilder, "y", 0x63);
-    g_variant_builder_add(&typeBuilder, "y", 0x74);
-    g_variant_builder_add(&typeBuilder, "y", 0x6F);
-    g_variant_builder_add(&typeBuilder, "y", 0x72);
-    g_variant_builder_add(&typeBuilder, "y", 0x20);
-    g_variant_builder_add(&typeBuilder, "y", 0x4D);
-    g_variant_builder_add(&typeBuilder, "y", 0x69);
-    g_variant_builder_add(&typeBuilder, "y", 0x72);
-    g_variant_builder_add(&typeBuilder, "y", 0x61);
-    g_variant_builder_add(&typeBuilder, "y", 0x63);
-    g_variant_builder_add(&typeBuilder, "y", 0x61);
-    g_variant_builder_add(&typeBuilder, "y", 0x73);
-    g_variant_builder_add(&typeBuilder, "y", 0x74);
-
-    g_variant_builder_init(&typeBuilder2, G_VARIANT_TYPE_BYTESTRING_ARRAY);
-    g_variant_builder_add_value(&typeBuilder2, g_variant_new("ay", &typeBuilder));
-    g_variant_builder_add(&variantBuilder, "{sv}", "VendorExtension", g_variant_new("aay", &typeBuilder2));
-    g_variant_builder_unref(&typeBuilder);
-    g_variant_builder_unref(&typeBuilder2);
 
 
-    _LOGD("DBUS :: setting P2PDeviceConfig");
+    g_variant_builder_init(&dict_builder, G_VARIANT_TYPE_VARDICT);
+    g_variant_builder_add(&dict_builder,"{sv}","DeviceName",g_variant_new("s", p2p_config_data->host_name));
+    g_variant_builder_add(&dict_builder, "{sv}", "PersistentReconnect", g_variant_new("b", 1));
+    g_variant_builder_add(&dict_builder, "{sv}", "PrimaryDeviceType", g_variant_new_from_bytes(G_VARIANT_TYPE_BYTESTRING,p2p_config_data->device_category, TRUE));
+
+    if(p2p_config_data->vendor_extensions) {
+        g_variant_builder_init(&array_builder, G_VARIANT_TYPE_BYTESTRING_ARRAY);
+        g_variant_builder_add_value(&array_builder, g_variant_new_from_bytes(G_VARIANT_TYPE_BYTESTRING,p2p_config_data->vendor_extensions, TRUE));
+
+        g_variant_builder_add(&dict_builder,"{sv}", "VendorExtension", g_variant_builder_end(&array_builder));
+    }
+
+    p2p_config_variant = g_variant_builder_end(&dict_builder);
+    _LOGD("DBUS :: setting P2PDeviceConfig: %s", g_variant_print(p2p_config_variant, TRUE));
     nm_dbus_connection_call_set(priv->dbus_connection,
                                 priv->name_owner->str,
                                 priv->object_path->str,
                                 NM_WPAS_DBUS_IFACE_INTERFACE_P2P_DEVICE,
                                 "P2PDeviceConfig",
-                                g_variant_new("a{sv}",&variantBuilder),
+                                p2p_config_variant,
                                 5000,
                                 p2p_config_data->cancellable,
                                 _p2p_handle_set_device_config_cb,
@@ -2163,53 +2060,78 @@ _p2p_call_set_device_config(NMSupplicantInterface *self, P2pConfigData *p2p_conf
 }
 
 static void
-_p2p_start_device_config(NMSupplicantInterface *self, char *primaryDeviceType, char *primarySubType, char *configMethods, guint goIntent)
+_p2p_start_device_config(NMSupplicantInterface *self,
+                         char                  *wps_config_methods,
+                         char                  *wfd_host_name,
+                         GBytes                *wfd_device_category,
+                         GBytes                *wfd_vendor_extensions,
+                         guint                  goIntent)
 {
     NMSupplicantInterfacePrivate *priv = NM_SUPPLICANT_INTERFACE_GET_PRIVATE(self);
-    P2pConfigData                      *p2p_config_data;
-
-    if(primaryDeviceType && primarySubType)
-        _LOGD("p2pDevConfig: start for device type %s-*-%s",primaryDeviceType,primarySubType);
+    P2pConfigData                *p2p_config_data;
+    const guint8 *device_category_data;
+    const guint8 *vendor_extensions_data;
+    gsize                         vendor_extension_len;
+    gsize                         device_category_len;
 
     p2p_config_data = priv->p2p_config_data;
 
-    if(!p2p_config_data) {
-        if(!primaryDeviceType || !primarySubType)
+    device_category_data = g_bytes_get_data(wfd_device_category,&device_category_len);
+    vendor_extensions_data = g_bytes_get_data(wfd_vendor_extensions,&vendor_extension_len);
+
+    if (!p2p_config_data) {
+
+        if (!wfd_device_category || !wps_config_methods)
             return;
+
+        // device_category_len  = g_bytes_get_size(wfd_device_category);
+        // vendor_extension_len = g_bytes_get_size(wfd_vendor_extensions);
 
         if (priv->state == NM_SUPPLICANT_INTERFACE_STATE_DOWN) {
             _LOGD("p2pDevConfig: interface is down. Cannot start with P2P Device Config");
             return;
         }
 
-        p2p_config_data = g_slice_new(P2pConfigData);
-        *p2p_config_data = (P2pConfigData){
-            .self  = self,
-            .primary_type  = g_strdup(primaryDeviceType),
-            .sub_type = g_strdup(primarySubType),
-            .config_methods   = g_strdup(configMethods),
-            .go_intent = goIntent
-        };
+        p2p_config_data       = g_slice_new(P2pConfigData);
+        *p2p_config_data      = (P2pConfigData){.self              = self,
+                                                .device_category   = g_bytes_new_static(device_category_data,device_category_len),
+                                                .host_name         = g_strdup(wfd_host_name),
+                                                .config_methods    = g_strdup(wps_config_methods),
+                                                .vendor_extensions = g_bytes_new_static(vendor_extensions_data,vendor_extension_len),
+                                                .go_intent         = goIntent};
         priv->p2p_config_data = p2p_config_data;
     } else {
-        g_free(p2p_config_data->primary_type);
-        g_free(p2p_config_data->sub_type);
+        g_free(p2p_config_data->device_category);
+        g_free(p2p_config_data->host_name);
         g_free(p2p_config_data->config_methods);
-        p2p_config_data->primary_type = g_strdup(primaryDeviceType);
-        p2p_config_data->sub_type = g_strdup(primarySubType);
-        p2p_config_data->config_methods = g_strdup(configMethods);
-        p2p_config_data->go_intent = goIntent;
+        g_free(p2p_config_data->vendor_extensions);
+        p2p_config_data->device_category   = g_bytes_new_static(device_category_data,device_category_len);
+        p2p_config_data->host_name         = g_strdup(wfd_host_name);
+        p2p_config_data->config_methods    = g_strdup(wps_config_methods);
+        p2p_config_data->vendor_extensions = g_bytes_new_static(vendor_extensions_data,vendor_extension_len);
+        p2p_config_data->go_intent         = goIntent;
     }
 
-    _LOGD("p2pDevConfig: setting P2PDeviceConfig...");
-    _p2p_call_set_device_config(self,p2p_config_data);
+    _LOGD("p2pDevConfig: device_category len: %i", device_category_len);
+    _p2p_call_set_device_config(self, p2p_config_data);
 }
 
 void
-nm_supplicant_interface_create_p2p_device_config(NMSupplicantInterface *self, char *primaryDeviceType, char *primarySubType, char *configMethods, guint goIntent)
+nm_supplicant_interface_create_p2p_device_config(NMSupplicantInterface *self,
+                                                 char                  *wps_config_methods,
+                                                 char                  *wfd_host_name,
+                                                 GBytes                *wfd_device_category,
+                                                 GBytes                *wfd_vendor_extensions,
+                                                 guint                  goIntent)
 {
     _LOGD("Supplicant Interface wants to set wpas p2p-device-confg!");
-    _p2p_start_device_config(self, primaryDeviceType, primarySubType, configMethods, goIntent);
+    // _p2p_start_device_config(self, primaryDeviceType, primarySubType, configMethods, goIntent);
+    _p2p_start_device_config(self,
+                             wps_config_methods,
+                             wfd_host_name,
+                             wfd_device_category,
+                             wfd_vendor_extensions,
+                             goIntent);
 }
 
 /*****************************************************************************/
