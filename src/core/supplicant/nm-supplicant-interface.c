@@ -40,8 +40,10 @@ typedef struct {
     NMSupplicantInterface *self;
     char                  *host_name;
     char                  *config_methods;
-    GBytes                *device_category;
-    GBytes                *vendor_extensions;
+    // GBytes                *device_category;
+    // GBytes                *vendor_extensions;
+    guint8                *device_category_data;
+    guint8                *vendor_extensions_data;
     guint                  go_intent;
 
     /* Provision Discovery Singal*/
@@ -2016,6 +2018,10 @@ _p2p_call_set_device_config(NMSupplicantInterface *self, P2pConfigData *p2p_conf
     GVariantBuilder               array_builder;
     GVariant                     *p2p_config_variant;
     NMSupplicantInterfacePrivate *priv = NM_SUPPLICANT_INTERFACE_GET_PRIVATE(self);
+    GBytes  *device_category;
+    // gsize   device_category_len;
+    GBytes  *vendor_extensions;
+    // gsize  vendor_extensions_len;
 
     if (!p2p_config_data->cancellable)
         p2p_config_data->cancellable = g_cancellable_new();
@@ -2036,11 +2042,13 @@ _p2p_call_set_device_config(NMSupplicantInterface *self, P2pConfigData *p2p_conf
     g_variant_builder_init(&dict_builder, G_VARIANT_TYPE_VARDICT);
     g_variant_builder_add(&dict_builder,"{sv}","DeviceName",g_variant_new("s", p2p_config_data->host_name));
     g_variant_builder_add(&dict_builder, "{sv}", "PersistentReconnect", g_variant_new("b", 1));
-    g_variant_builder_add(&dict_builder, "{sv}", "PrimaryDeviceType", g_variant_new_from_bytes(G_VARIANT_TYPE_BYTESTRING,p2p_config_data->device_category, TRUE));
+    device_category = g_bytes_new(p2p_config_data->device_category_data,sizeof(p2p_config_data->device_category_data));
+    g_variant_builder_add(&dict_builder, "{sv}", "PrimaryDeviceType", g_variant_new_from_bytes(G_VARIANT_TYPE_BYTESTRING,device_category, TRUE));
 
-    if(p2p_config_data->vendor_extensions) {
+    if(p2p_config_data->vendor_extensions_data) {
         g_variant_builder_init(&array_builder, G_VARIANT_TYPE_BYTESTRING_ARRAY);
-        g_variant_builder_add_value(&array_builder, g_variant_new_from_bytes(G_VARIANT_TYPE_BYTESTRING,p2p_config_data->vendor_extensions, TRUE));
+        vendor_extensions = g_bytes_new(p2p_config_data->vendor_extensions_data,sizeof(p2p_config_data->vendor_extensions_data));
+        g_variant_builder_add_value(&array_builder, g_variant_new_from_bytes(G_VARIANT_TYPE_BYTESTRING,vendor_extensions, TRUE));
 
         g_variant_builder_add(&dict_builder,"{sv}", "VendorExtension", g_variant_builder_end(&array_builder));
     }
@@ -2069,15 +2077,15 @@ _p2p_start_device_config(NMSupplicantInterface *self,
 {
     NMSupplicantInterfacePrivate *priv = NM_SUPPLICANT_INTERFACE_GET_PRIVATE(self);
     P2pConfigData                *p2p_config_data;
-    const guint8 *device_category_data;
-    const guint8 *vendor_extensions_data;
+    const guint8 *device_category_bytes;
+    const guint8 *vendor_extensions_bytes;
     gsize                         vendor_extension_len;
     gsize                         device_category_len;
 
     p2p_config_data = priv->p2p_config_data;
 
-    device_category_data = g_bytes_get_data(wfd_device_category,&device_category_len);
-    vendor_extensions_data = g_bytes_get_data(wfd_vendor_extensions,&vendor_extension_len);
+    device_category_bytes = g_bytes_get_data(wfd_device_category,&device_category_len);
+    vendor_extensions_bytes = g_bytes_get_data(wfd_vendor_extensions,&vendor_extension_len);
 
     if (!p2p_config_data) {
 
@@ -2086,29 +2094,38 @@ _p2p_start_device_config(NMSupplicantInterface *self,
 
         // device_category_len  = g_bytes_get_size(wfd_device_category);
         // vendor_extension_len = g_bytes_get_size(wfd_vendor_extensions);
-
+        
         if (priv->state == NM_SUPPLICANT_INTERFACE_STATE_DOWN) {
             _LOGD("p2pDevConfig: interface is down. Cannot start with P2P Device Config");
             return;
         }
 
+        
+
         p2p_config_data       = g_slice_new(P2pConfigData);
         *p2p_config_data      = (P2pConfigData){.self              = self,
-                                                .device_category   = g_bytes_new_static(device_category_data,device_category_len),
                                                 .host_name         = g_strdup(wfd_host_name),
                                                 .config_methods    = g_strdup(wps_config_methods),
-                                                .vendor_extensions = g_bytes_new_static(vendor_extensions_data,vendor_extension_len),
+                                                // .device_category   = g_bytes_new_take(device_category_data,device_category_len),
+                                                .device_category_data = g_memdup(device_category_bytes,device_category_len),
+                                                // .vendor_extensions = g_bytes_new_take(vendor_extensions_data,vendor_extension_len),
+                                                .vendor_extensions_data = g_memdup(vendor_extensions_bytes,vendor_extension_len),
                                                 .go_intent         = goIntent};
         priv->p2p_config_data = p2p_config_data;
     } else {
-        g_free(p2p_config_data->device_category);
         g_free(p2p_config_data->host_name);
         g_free(p2p_config_data->config_methods);
-        g_free(p2p_config_data->vendor_extensions);
-        p2p_config_data->device_category   = g_bytes_new_static(device_category_data,device_category_len);
+        // g_free(p2p_config_data->device_category);
+        // g_free(p2p_config_data->vendor_extensions);
+        g_free(p2p_config_data->device_category_data);
+        g_free(p2p_config_data->vendor_extensions_data);
+
         p2p_config_data->host_name         = g_strdup(wfd_host_name);
         p2p_config_data->config_methods    = g_strdup(wps_config_methods);
-        p2p_config_data->vendor_extensions = g_bytes_new_static(vendor_extensions_data,vendor_extension_len);
+        // p2p_config_data->device_category   = g_bytes_new_take(device_category_data,device_category_len);
+        p2p_config_data->device_category_data   = g_memdup(device_category_bytes,device_category_len);
+        // p2p_config_data->vendor_extensions = g_bytes_new_take(vendor_extensions_data,vendor_extension_len);
+        p2p_config_data->vendor_extensions_data = g_memdup(vendor_extensions_bytes,vendor_extension_len);
         p2p_config_data->go_intent         = goIntent;
     }
 
@@ -3446,8 +3463,7 @@ _signal_handle(NMSupplicantInterface *self,
                 if(u_v) {
                     const guint8 *addr_data;
                     gsize         addr_len  = 0;
-                    const guint8 *mask_data = NULL;
-                    gsize         mask_len  = 0;
+                    
 
                     /* The address is passed in network-byte-order */
                     addr_data = g_variant_get_fixed_array(u_v, &addr_len, 1);
@@ -3457,32 +3473,6 @@ _signal_handle(NMSupplicantInterface *self,
                     } else {
                         _LOGD("Invalid IpAddrGo Length!");
                     }
-#if 0
-                    if(!addr_data || addr_len == 0) {
-                        char *ip_str;
-                        if(addr_len == 4) {
-                            inet_ntop(AF_INET, addr_data, ip_str, INET6_ADDRSTRLEN);
-                            _LOGD("Extracted IPAddrGo IPv4 : %s", ip_str);
-                        } else if (addr_len == 16) {
-                            inet_ntop(AF_INET6, addr_data, ip_str, INET6_ADDRSTRLEN);
-                            _LOGD("Extracted IPAddrGo IPv6 : %s", ip_str);
-                        } else {
-                            _LOGD("Extracted IPAddrGo unkown format - length : %i", addr_len);
-                        }
-
-                        u_v = g_variant_lookup_value(args, "IpAddrMask", G_VARIANT_TYPE_BYTESTRING);
-                        if (u_v)
-                            mask_data = g_variant_get_fixed_array(u_v, &mask_len, 1);
-
-                        if (addr_len == NM_AF_INET_SIZE && mask_len == NM_AF_INET_SIZE) {
-                            guint32 netmask;
-
-                            memcpy(&netmask, mask_data, NM_AF_INET_SIZE);
-                        }
-                    } else {
-                        _LOGD("Invalid or empty IpAddrGo GVariant:\n%s",g_variant_print(u_v,TRUE));
-                    }
-#endif
                 } else {
                     _LOGW("P2P: GroupStarted signaled empty or invalid GO IP Address information");
                 }
