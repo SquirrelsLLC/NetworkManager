@@ -167,7 +167,8 @@ check_connection_peer_joined(NMDeviceWifiP2P *device)
 
     if (!conn || !priv->group_iface)
         return FALSE;
-
+    //TODO: Fix the underlying causes that make this return FALSE for Wi-Fi display connections (namely windows client connections)
+    #if 0
     /* Comparing the object path found on the group_iface with the peers
      * found on the mgmt_iface is legal. */
     group = nm_supplicant_interface_get_p2p_group_path(priv->group_iface);
@@ -183,6 +184,7 @@ check_connection_peer_joined(NMDeviceWifiP2P *device)
     groups = nm_wifi_p2p_peer_get_groups(peer);
     if (!groups || !g_strv_contains(groups, group))
         return FALSE;
+    #endif
     return TRUE;
 }
 
@@ -518,7 +520,8 @@ act_stage2_config(NMDevice *device, NMDeviceStateReason *out_failure_reason)
                                                         7);
 
         _LOGD(LOGD_P2P,"Act_Stage 2 ::  Activating Start Find on management interface");
-        nm_supplicant_interface_p2p_start_find(priv->mgmt_iface, 42);
+        // TODO: instead of just putting the device in 'start-find' for 600 seconds, we should set up some timeout and calback system
+        nm_supplicant_interface_p2p_start_find(priv->mgmt_iface, 600);
         return NM_ACT_STAGE_RETURN_POSTPONE;
     }
 
