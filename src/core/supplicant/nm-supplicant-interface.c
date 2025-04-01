@@ -45,6 +45,7 @@ typedef struct {
     guint8                *device_category_data;
     guint8                *vendor_extensions_data;
     guint                  go_intent;
+    gboolean               persistent_reconnect;
 
     /* Provision Discovery Singal*/
     guint         pd_pin_req_signal_id;
@@ -2041,7 +2042,7 @@ _p2p_call_set_device_config(NMSupplicantInterface *self, P2pConfigData *p2p_conf
 
     g_variant_builder_init(&dict_builder, G_VARIANT_TYPE_VARDICT);
     g_variant_builder_add(&dict_builder,"{sv}","DeviceName",g_variant_new("s", p2p_config_data->host_name));
-    g_variant_builder_add(&dict_builder, "{sv}", "PersistentReconnect", g_variant_new("b", 1));
+    g_variant_builder_add(&dict_builder, "{sv}", "PersistentReconnect", g_variant_new("b", p2p_config_data->persistent_reconnect));
     device_category = g_bytes_new(p2p_config_data->device_category_data,sizeof(p2p_config_data->device_category_data));
     g_variant_builder_add(&dict_builder, "{sv}", "PrimaryDeviceType", g_variant_new_from_bytes(G_VARIANT_TYPE_BYTESTRING,device_category, TRUE));
 
@@ -2069,11 +2070,12 @@ _p2p_call_set_device_config(NMSupplicantInterface *self, P2pConfigData *p2p_conf
 
 static void
 _p2p_start_device_config(NMSupplicantInterface *self,
-                         char                  *wps_config_methods,
-                         char                  *wfd_host_name,
-                         GBytes                *wfd_device_category,
-                         GBytes                *wfd_vendor_extensions,
-                         guint                  goIntent)
+    char                  *wps_config_methods,
+    char                  *wfd_host_name,
+    GBytes                *wfd_device_category,
+    GBytes                *wfd_vendor_extensions,
+    guint                  goIntent,
+    gboolean               persistentReconnect)
 {
     NMSupplicantInterfacePrivate *priv = NM_SUPPLICANT_INTERFACE_GET_PRIVATE(self);
     P2pConfigData                *p2p_config_data;
@@ -2110,7 +2112,8 @@ _p2p_start_device_config(NMSupplicantInterface *self,
                                                 .device_category_data = g_memdup(device_category_bytes,device_category_len),
                                                 // .vendor_extensions = g_bytes_new_take(vendor_extensions_data,vendor_extension_len),
                                                 .vendor_extensions_data = g_memdup(vendor_extensions_bytes,vendor_extension_len),
-                                                .go_intent         = goIntent};
+                                                .go_intent         = goIntent,
+                                                .persistent_reconnect    = persistentReconnect};
         priv->p2p_config_data = p2p_config_data;
     } else {
         g_free(p2p_config_data->host_name);
@@ -2127,6 +2130,7 @@ _p2p_start_device_config(NMSupplicantInterface *self,
         // p2p_config_data->vendor_extensions = g_bytes_new_take(vendor_extensions_data,vendor_extension_len);
         p2p_config_data->vendor_extensions_data = g_memdup(vendor_extensions_bytes,vendor_extension_len);
         p2p_config_data->go_intent         = goIntent;
+        p2p_config_data->persistent_reconnect = persistentReconnect;
     }
 
     _LOGD("p2pDevConfig: device_category len: %i", device_category_len);
@@ -2139,7 +2143,8 @@ nm_supplicant_interface_create_p2p_device_config(NMSupplicantInterface *self,
                                                  char                  *wfd_host_name,
                                                  GBytes                *wfd_device_category,
                                                  GBytes                *wfd_vendor_extensions,
-                                                 guint                  goIntent)
+                                                 guint                  goIntent,
+                                                 gboolean               persistentReconnect)
 {
     _LOGD("Supplicant Interface wants to set wpas p2p-device-confg!");
     // _p2p_start_device_config(self, primaryDeviceType, primarySubType, configMethods, goIntent);
@@ -2148,7 +2153,8 @@ nm_supplicant_interface_create_p2p_device_config(NMSupplicantInterface *self,
                              wfd_host_name,
                              wfd_device_category,
                              wfd_vendor_extensions,
-                             goIntent);
+                             goIntent,
+                             persistentReconnect);
 }
 
 /*****************************************************************************/

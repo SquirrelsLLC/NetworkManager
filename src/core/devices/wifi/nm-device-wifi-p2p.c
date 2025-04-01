@@ -365,17 +365,17 @@ supplicant_find_timeout_cb(gpointer user_data)
     NMDeviceWifiP2PPrivate *priv   = NM_DEVICE_WIFI_P2P_GET_PRIVATE(self);
 
     if(priv->wfd_device_mode != _NM_WIFI_P2P_WFD_DEVICE_MODE_SINK) {
-    priv->find_peer_timeout_id = 0;
+        priv->find_peer_timeout_id = 0;
 
-    nm_supplicant_interface_p2p_cancel_connect(priv->mgmt_iface);
+        nm_supplicant_interface_p2p_cancel_connect(priv->mgmt_iface);
 
-    if (nm_device_is_activating(device)) {
-        _LOGW(LOGD_DEVICE | LOGD_WIFI,
-              "Activation: (wifi-p2p) could not find peer, failing activation");
-        nm_device_state_changed(device,
-                                NM_DEVICE_STATE_FAILED,
-                                NM_DEVICE_STATE_REASON_PEER_NOT_FOUND);
-    }
+        if (nm_device_is_activating(device)) {
+            _LOGW(LOGD_DEVICE | LOGD_WIFI,
+                "Activation: (wifi-p2p) could not find peer, failing activation");
+            nm_device_state_changed(device,
+                                    NM_DEVICE_STATE_FAILED,
+                                    NM_DEVICE_STATE_REASON_PEER_NOT_FOUND);
+        }
     } else {
         _LOGD(LOGD_P2P, "supplicant_p2p_start_find timeout! Calling again for p2p_start-find(10)");
         priv->find_peer_timeout_id = g_timeout_add_seconds(10, supplicant_find_timeout_cb, self);
@@ -522,11 +522,18 @@ act_stage2_config(NMDevice *device, NMDeviceStateReason *out_failure_reason)
                                                         wfd_host_name,
                                                         wfd_device_category,
                                                         wfd_vendor_extensions,
-                                                        7);
+                                                        7,  // TODO: export goIntent as a p2p_setting 
+                                                        1); // TODO: export persistentReconnect as a p2p_setting
 
-        _LOGD(LOGD_P2P,"Act_Stage 2 ::  Activating Start Find on management interface");
+        _LOGD(LOGD_P2P,"Act_Stage 2 ::  Activating p2p_start_find(10) on management interface");
         // TODO: instead of just putting the device in 'start-find' for 600 seconds, we should set up some timeout and calback system
-        nm_supplicant_interface_p2p_start_find(priv->mgmt_iface, 600);
+        /* Set up a timeout on the find attempt and run a find for the same period of time */
+        if (priv->find_peer_timeout_id == 0) {
+            // priv->find_peer_timeout_id = g_timeout_add_seconds(10, supplicant_find_timeout_cb, self);
+
+            // nm_supplicant_interface_p2p_start_find(priv->mgmt_iface, 10);
+            nm_supplicant_interface_p2p_start_listen(priv->mgmt_iface, 60);
+        }
         return NM_ACT_STAGE_RETURN_POSTPONE;
     }
 

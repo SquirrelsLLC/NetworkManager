@@ -173,6 +173,7 @@ gboolean nm_supplicant_interface_get_p2p_assigned_addr(NMSupplicantInterface *se
 gboolean nm_supplicant_interface_get_p2p_assigned_go(NMSupplicantInterface *self, in_addr_t *assigned_go);
 
 void nm_supplicant_interface_p2p_start_find(NMSupplicantInterface *self, guint timeout);
+void nm_supplicant_interface_p2p_start_listen(NMSupplicantInterface *self, guint timeout);
 void nm_supplicant_interface_p2p_stop_find(NMSupplicantInterface *self);
 
 void nm_supplicant_interface_p2p_connect(NMSupplicantInterface *self,
@@ -196,7 +197,7 @@ void nm_supplicant_interface_enroll_wps(NMSupplicantInterface *self,
 
 void nm_supplicant_interface_cancel_wps(NMSupplicantInterface *self);
 
-void nm_supplicant_interface_create_p2p_device_config(NMSupplicantInterface *self, char *wps_config_methods, char *wfd_host_name, GBytes *wfd_device_category, GBytes *wfd_vendor_extensions, guint goIntent);
+void nm_supplicant_interface_create_p2p_device_config(NMSupplicantInterface *self, char *wps_config_methods, char *wfd_host_name, GBytes *wfd_device_category, GBytes *wfd_vendor_extensions, guint goIntent, gboolean persistentReconnect);
 
 NMSupplicantAuthState nm_supplicant_interface_get_auth_state(NMSupplicantInterface *self);
 
