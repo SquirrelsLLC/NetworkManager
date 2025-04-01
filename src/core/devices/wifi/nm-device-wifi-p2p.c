@@ -364,6 +364,7 @@ supplicant_find_timeout_cb(gpointer user_data)
     NMDeviceWifiP2P        *self   = NM_DEVICE_WIFI_P2P(user_data);
     NMDeviceWifiP2PPrivate *priv   = NM_DEVICE_WIFI_P2P_GET_PRIVATE(self);
 
+    if(priv->wfd_device_mode != _NM_WIFI_P2P_WFD_DEVICE_MODE_SINK) {
     priv->find_peer_timeout_id = 0;
 
     nm_supplicant_interface_p2p_cancel_connect(priv->mgmt_iface);
@@ -375,7 +376,11 @@ supplicant_find_timeout_cb(gpointer user_data)
                                 NM_DEVICE_STATE_FAILED,
                                 NM_DEVICE_STATE_REASON_PEER_NOT_FOUND);
     }
-
+    } else {
+        _LOGD(LOGD_P2P, "supplicant_p2p_start_find timeout! Calling again for p2p_start-find(10)");
+        priv->find_peer_timeout_id = g_timeout_add_seconds(10, supplicant_find_timeout_cb, self);
+        nm_supplicant_interface_p2p_start_find(priv->mgmt_iface, 10);
+    }
     return G_SOURCE_REMOVE;
 }
 

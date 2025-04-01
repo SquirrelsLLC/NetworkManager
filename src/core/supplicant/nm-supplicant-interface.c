@@ -3061,13 +3061,30 @@ nm_supplicant_interface_p2p_start_find(NMSupplicantInterface *self, guint timeou
 
     g_variant_builder_init(&builder, G_VARIANT_TYPE_VARDICT);
     g_variant_builder_add(&builder, "{sv}", "Timeout", g_variant_new_int32(timeout));
-
+    _LOGD("Calling p2p_find with Timeout %i",timeout);
     _dbus_connection_call_simple(self,
                                  NM_WPAS_DBUS_IFACE_INTERFACE_P2P_DEVICE,
                                  "Find",
                                  g_variant_new("(a{sv})", &builder),
                                  G_VARIANT_TYPE("()"),
                                  "p2p-find");
+}
+
+void
+nm_supplicant_interface_p2p_start_listen(NMSupplicantInterface *self, guint timeout)
+{
+    GVariantBuilder builder;
+
+    g_return_if_fail(NM_IS_SUPPLICANT_INTERFACE(self));
+    g_return_if_fail(timeout > 0 && timeout <= 600);
+
+    _LOGD("Calling p2p_listen with Timeout %i",timeout);
+    _dbus_connection_call_simple(self,
+                                 NM_WPAS_DBUS_IFACE_INTERFACE_P2P_DEVICE,
+                                 "Listen",
+                                 g_variant_new("(i)",timeout),
+                                 G_VARIANT_TYPE("()"),
+                                 "p2p-listen");
 }
 
 void
