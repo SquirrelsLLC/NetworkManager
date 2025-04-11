@@ -43,7 +43,9 @@ typedef struct {
     // GBytes                *device_category;
     // GBytes                *vendor_extensions;
     guint8                *device_category_data;
+    gsize                 *device_category_length;
     guint8                *vendor_extensions_data;
+    gsize                 *vendor_extensions_length;
     guint                  go_intent;
     gboolean               persistent_reconnect;
 
@@ -2043,12 +2045,12 @@ _p2p_call_set_device_config(NMSupplicantInterface *self, P2pConfigData *p2p_conf
     g_variant_builder_init(&dict_builder, G_VARIANT_TYPE_VARDICT);
     g_variant_builder_add(&dict_builder,"{sv}","DeviceName",g_variant_new("s", p2p_config_data->host_name));
     g_variant_builder_add(&dict_builder, "{sv}", "PersistentReconnect", g_variant_new("b", p2p_config_data->persistent_reconnect));
-    device_category = g_bytes_new(p2p_config_data->device_category_data,sizeof(p2p_config_data->device_category_data));
+    device_category = g_bytes_new(p2p_config_data->device_category_data,p2p_config_data->device_category_length);
     g_variant_builder_add(&dict_builder, "{sv}", "PrimaryDeviceType", g_variant_new_from_bytes(G_VARIANT_TYPE_BYTESTRING,device_category, TRUE));
 
     if(p2p_config_data->vendor_extensions_data) {
         g_variant_builder_init(&array_builder, G_VARIANT_TYPE_BYTESTRING_ARRAY);
-        vendor_extensions = g_bytes_new(p2p_config_data->vendor_extensions_data,sizeof(p2p_config_data->vendor_extensions_data));
+        vendor_extensions = g_bytes_new(p2p_config_data->vendor_extensions_data,p2p_config_data->vendor_extensions_length );
         g_variant_builder_add_value(&array_builder, g_variant_new_from_bytes(G_VARIANT_TYPE_BYTESTRING,vendor_extensions, TRUE));
 
         g_variant_builder_add(&dict_builder,"{sv}", "VendorExtension", g_variant_builder_end(&array_builder));
@@ -2089,13 +2091,22 @@ _p2p_start_device_config(NMSupplicantInterface *self,
     device_category_bytes = g_bytes_get_data(wfd_device_category,&device_category_len);
     vendor_extensions_bytes = g_bytes_get_data(wfd_vendor_extensions,&vendor_extension_len);
 
+    char * hex_str = g_strdup_printf("GByteArray[%u]:",vendor_extension_len);
+    for(guint i = 0; i < vendor_extension_len; i++) {
+        char *byte = g_strdup_printf("%02X ", vendor_extensions_bytes[i]);
+        char *tmp = g_strconcat(hex_str, byte, NULL);
+        g_free(hex_str);
+        g_free(byte);
+        hex_str = tmp; 
+    }
+    _LOGD("vendor extension bytes: %s", hex_str);
+    g_free(hex_str);
+
+
     if (!p2p_config_data) {
 
         if (!wfd_device_category || !wps_config_methods)
             return;
-
-        // device_category_len  = g_bytes_get_size(wfd_device_category);
-        // vendor_extension_len = g_bytes_get_size(wfd_vendor_extensions);
         
         if (priv->state == NM_SUPPLICANT_INTERFACE_STATE_DOWN) {
             _LOGD("p2pDevConfig: interface is down. Cannot start with P2P Device Config");
@@ -2110,8 +2121,10 @@ _p2p_start_device_config(NMSupplicantInterface *self,
                                                 .config_methods    = g_strdup(wps_config_methods),
                                                 // .device_category   = g_bytes_new_take(device_category_data,device_category_len),
                                                 .device_category_data = g_memdup(device_category_bytes,device_category_len),
+                                                .device_category_length = device_category_len,
                                                 // .vendor_extensions = g_bytes_new_take(vendor_extensions_data,vendor_extension_len),
                                                 .vendor_extensions_data = g_memdup(vendor_extensions_bytes,vendor_extension_len),
+                                                .vendor_extensions_length = vendor_extension_len,
                                                 .go_intent         = goIntent,
                                                 .persistent_reconnect    = persistentReconnect};
         priv->p2p_config_data = p2p_config_data;
@@ -2127,8 +2140,10 @@ _p2p_start_device_config(NMSupplicantInterface *self,
         p2p_config_data->config_methods    = g_strdup(wps_config_methods);
         // p2p_config_data->device_category   = g_bytes_new_take(device_category_data,device_category_len);
         p2p_config_data->device_category_data   = g_memdup(device_category_bytes,device_category_len);
+        p2p_config_data->device_category_length = device_category_len;
         // p2p_config_data->vendor_extensions = g_bytes_new_take(vendor_extensions_data,vendor_extension_len);
         p2p_config_data->vendor_extensions_data = g_memdup(vendor_extensions_bytes,vendor_extension_len);
+        p2p_config_data->vendor_extensions_length = vendor_extension_len;
         p2p_config_data->go_intent         = goIntent;
         p2p_config_data->persistent_reconnect = persistentReconnect;
     }
