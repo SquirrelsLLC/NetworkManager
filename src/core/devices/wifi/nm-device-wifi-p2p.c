@@ -379,8 +379,8 @@ supplicant_find_timeout_cb(gpointer user_data)
     } else {
         _LOGD(LOGD_P2P, "supplicant_p2p_start_find timeout! Calling again for p2p_start-find(10)");
         priv->find_peer_timeout_id = g_timeout_add_seconds(10, supplicant_find_timeout_cb, self);
-        // nm_supplicant_interface_p2p_start_find(priv->mgmt_iface, 10);
-        nm_supplicant_interface_p2p_start_listen(priv->mgmt_iface, 10);
+        nm_supplicant_interface_p2p_start_find(priv->mgmt_iface, 10);
+        /// nm_supplicant_interface_p2p_start_listen(priv->mgmt_iface, 10);
     }
     return G_SOURCE_REMOVE;
 }
@@ -532,8 +532,8 @@ act_stage2_config(NMDevice *device, NMDeviceStateReason *out_failure_reason)
         if (priv->find_peer_timeout_id == 0) {
             priv->find_peer_timeout_id = g_timeout_add_seconds(10, supplicant_find_timeout_cb, self);
 
-            // nm_supplicant_interface_p2p_start_find(priv->mgmt_iface, 10);
-            nm_supplicant_interface_p2p_start_listen(priv->mgmt_iface, 10);
+            nm_supplicant_interface_p2p_start_find(priv->mgmt_iface, 10);
+            // nm_supplicant_interface_p2p_start_listen(priv->mgmt_iface, 10);
         }
         return NM_ACT_STAGE_RETURN_POSTPONE;
     }
