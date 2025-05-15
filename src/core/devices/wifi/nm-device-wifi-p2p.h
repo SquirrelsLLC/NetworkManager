@@ -22,6 +22,7 @@
 
 #define NM_DEVICE_WIFI_P2P_PEERS  "peers"
 #define NM_DEVICE_WIFI_P2P_GROUPS "groups"
+#define NM_DEVICE_WIFI_P2P_PIN "pin"
 
 typedef struct _NMDeviceWifiP2P      NMDeviceWifiP2P;
 typedef struct _NMDeviceWifiP2PClass NMDeviceWifiP2PClass;

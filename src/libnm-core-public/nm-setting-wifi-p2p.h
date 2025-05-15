@@ -66,6 +66,12 @@ G_BEGIN_DECLS
  * The Wi-Fi Alliance WFA Device Type Code to use in the discovery beacon
  */
 #define NM_SETTING_WIFI_P2P_WFD_DEVICE_CATEGORY "wfd-device-category"
+/**
+ * NM_SETTING_WIFI_P2P_WFD_SECURITY:
+ *
+ * The type of connection security used when making a P2P connection
+ */
+#define NM_SETTING_WIFI_P2P_WFD_SECURITY "wfd-security"
 
 
 /**
@@ -94,6 +100,24 @@ G_BEGIN_DECLS
  * Since: 1.36
  */
 #define NM_SETTING_WIFI_P2P_MODE_SINK "wfd-sink"
+
+/**
+ * NM_SETTING_WIFI_P2P_SECURITY_PBC:
+ * 
+ * PBC security
+ * 
+ * Since: 1.36
+ */
+#define NM_SETTING_WIFI_P2P_SECURITY_PUSH_BUTTON "pbc"
+/**
+ * NM_SETTING_WIFI_P2P_SECURITY_PIN:
+ * 
+ * PIN security
+ * 
+ * Since: 1.36
+ */
+#define NM_SETTING_WIFI_P2P_SECURITY_PIN_DISPLAY "pin"
+
 
 
 typedef struct _NMSettingWifiP2PClass NMSettingWifiP2PClass;
@@ -124,6 +148,9 @@ GBytes *nm_setting_wifi_p2p_get_vendor_extension_ies(NMSettingWifiP2P *setting);
 
 NM_AVAILABLE_IN_1_36
 const char *nm_setting_wifi_p2p_get_wfd_host_name(NMSettingWifiP2P *setting);
+
+NM_AVAILABLE_IN_1_36
+const char *nm_setting_wifi_p2p_get_wfd_security(NMSettingWifiP2P *setting);
 
 G_END_DECLS
 

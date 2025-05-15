@@ -18,11 +18,12 @@
 
 /*****************************************************************************/
 
-NM_GOBJECT_PROPERTIES_DEFINE_BASE(PROP_PEERS, );
+NM_GOBJECT_PROPERTIES_DEFINE_BASE(PROP_PEERS, PROP_PIN, );
 
 enum {
     PEER_ADDED,
     PEER_REMOVED,
+    PIN_CHANGED,
 
     LAST_SIGNAL
 };
@@ -31,6 +32,7 @@ static guint signals[LAST_SIGNAL] = {0};
 
 typedef struct {
     NMLDBusPropertyAO peers;
+    char             *pin;
 } NMDeviceWifiP2PPrivate;
 
 struct _NMDeviceWifiP2P {
@@ -125,6 +127,24 @@ nm_device_wifi_p2p_get_peer_by_path(NMDeviceWifiP2P *device, const char *path)
     }
 
     return peer;
+}
+
+/**
+ * nm_device_wifi_p2p_get_pin:
+ * @device: a #NMDeviceWifiP2P
+ *
+ * Gets the latest PIN that has been provisied for p2p connection security
+ *
+ * Returns: (transfer none): the PIN or %NULL if none is found.
+ *
+ * Since: 1.36
+ **/
+const char *
+nm_device_wifi_p2p_get_pin(NMDeviceWifiP2P *device)
+{
+    g_return_val_if_fail(NM_IS_DEVICE_WIFI_P2P(device), NULL);
+
+    return _nml_coerce_property_str_not_empty(NM_DEVICE_WIFI_P2P_GET_PRIVATE(device)->pin);
 }
 
 /**
@@ -310,6 +330,9 @@ get_property(GObject *object, guint prop_id, GValue *value, GParamSpec *pspec)
     case PROP_PEERS:
         g_value_take_boxed(value, _nm_utils_copy_object_array(nm_device_wifi_p2p_get_peers(self)));
         break;
+    case PROP_PIN:
+        g_value_set_string(value, nm_device_wifi_p2p_get_pin(self));
+        break;
     default:
         G_OBJECT_WARN_INVALID_PROPERTY_ID(object, prop_id, pspec);
         break;
@@ -337,7 +360,8 @@ const NMLDBusMetaIface _nml_dbus_meta_iface_nm_device_wifip2p = NML_DBUS_META_IF
                                             _priv.peers,
                                             nm_wifi_p2p_peer_get_type,
                                             .notify_changed_ao =
-                                                _property_ao_notify_changed_peers_cb), ), );
+                                                _property_ao_notify_changed_peers_cb),
+        NML_DBUS_META_PROPERTY_INIT_S("Pin", PROP_PIN, NMDeviceWifiP2P, _priv.pin), ), );
 
 static void
 nm_device_wifi_p2p_class_init(NMDeviceWifiP2PClass *klass)
@@ -368,6 +392,16 @@ nm_device_wifi_p2p_class_init(NMDeviceWifiP2PClass *klass)
                                                     "",
                                                     G_TYPE_PTR_ARRAY,
                                                     G_PARAM_READABLE | G_PARAM_STATIC_STRINGS);
+
+    /**
+     * NMDeviceWifiP2P:pin: (type GPtrArray(NMWifiP2PPeer))
+     *
+     * The most recently provisioned PIN for p2p connection security
+     *
+     * Since: 1.36
+     **/
+    obj_properties[PROP_PIN] =
+        g_param_spec_string(NM_DEVICE_WIFI_P2P_PIN, "", "", NULL, G_PARAM_READABLE);
 
     _nml_dbus_meta_class_init_with_properties(object_class,
                                               &_nml_dbus_meta_iface_nm_device_wifip2p);
@@ -411,4 +445,24 @@ nm_device_wifi_p2p_class_init(NMDeviceWifiP2PClass *klass)
                                          G_TYPE_NONE,
                                          1,
                                          G_TYPE_OBJECT);
+
+    /**
+     * NMDeviceWifiP2P::pin-changed:
+     * @device: the Wi-Fi P2P device that received the signal
+     * @pin: the generated pin code
+     *
+     * Notifies that a new PIN code has been generated for PIN secutirity
+     *
+     * Since: 1.36
+     **/
+    signals[PIN_CHANGED] = g_signal_new("pin-changed",
+                                            G_OBJECT_CLASS_TYPE(object_class),
+                                            G_SIGNAL_RUN_FIRST,
+                                            0,
+                                            NULL,
+                                            NULL,
+                                            g_cclosure_marshal_VOID__STRING,
+                                            G_TYPE_NONE,
+                                            1,
+                                            G_TYPE_STRING);
 }

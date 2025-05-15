@@ -1830,6 +1830,7 @@ global:
 	nm_setting_ovs_dpdk_get_n_rxq;
 	nm_wifi_p2p_wfd_device_mode_get_type;
 	nm_setting_wifi_p2p_get_wfd_device_mode;
+	nm_device_wifi_p2p_get_pin;
 } libnm_1_34_0;
 
 libnm_1_38_0 {

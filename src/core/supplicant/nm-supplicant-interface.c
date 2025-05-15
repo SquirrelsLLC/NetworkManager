@@ -1935,10 +1935,6 @@ _p2p_provision_discovery_cb(GDBusConnection *connection,
     char *peer_object_path;
     char *generated_pin;
 
-    // _LOGD("Provision Discovery Signal Callback!");
-    _LOGD("Provision Discovery (%s) Signal Callback!", signal_name);
-    // _LOGD("p2p: New P2P Provision Discovery Request Parameters: %s",g_variant_print(parameters, TRUE));
-
     if (g_variant_is_of_type(parameters, G_VARIANT_TYPE("(os)"))) {
         g_variant_get(parameters, "(&o&s)", &peer_object_path, &generated_pin);
 
@@ -1946,10 +1942,8 @@ _p2p_provision_discovery_cb(GDBusConnection *connection,
         _LOGD("Parameters were given in an unexpected format!");
         return;
     }
-    if (generated_pin)
-        _LOGD("p2p: Generated PIN: %s for peer: %s", generated_pin, peer_object_path);
 
-    // BMEEK: Emit signal, to be picked up by nm-device-wifi-p2p
+    g_signal_emit(self, signals[PD_REQ], 0, generated_pin);
 }
 
 static void
@@ -1972,13 +1966,12 @@ _p2p_handle_set__config_methods_cb(GVariant *res, GError *error, gpointer user_d
 static void
 _p2p_handle_set_device_config_cb(GVariant *res, GError *error, gpointer user_data)
 {
-    /** 
-     * BMEEK: connect to provision discovery request signals
+    /* 
      * The signals should be
      * ProvisionDiscoveryRequestDisplayPin
      * ProvisionDiscoveryPBCRequest
      * ProvisionDiscoveryFailure
-     * */
+     */
     NMSupplicantInterface        *self;
     NMSupplicantInterfacePrivate *priv;
     P2pConfigData                *p2p_config_data;
@@ -1999,8 +1992,15 @@ _p2p_handle_set_device_config_cb(GVariant *res, GError *error, gpointer user_dat
 
     // BMEEK: subscribe to the PBC & Failure provision discovery signal as well. We should be conditionally subscribing to these signals based on our supported wpa_s config methods
 
-    _LOGD("Subscribing to the ProvisionDiscoveryRequest signals");
+   
 
+    // if(p2p_config_data->pd_pin_req_signal_id != NULL) {
+    //     _LOGD("Clearing existing ProvisionDiscovery dbus subscription!!");
+    //     nm_clear_g_dbus_connection_signal(priv->dbus_connection, &p2p_config_data->pd_pin_req_signal_id);
+    // }
+
+    _LOGD("Subscribing to the ProvisionDiscoveryRequest signals");
+    
     p2p_config_data->pd_pin_req_signal_id =
         g_dbus_connection_signal_subscribe(priv->dbus_connection,
                                            priv->name_owner->str,
@@ -2022,9 +2022,28 @@ _p2p_call_set_device_config(NMSupplicantInterface *self, P2pConfigData *p2p_conf
     GVariant                     *p2p_config_variant;
     NMSupplicantInterfacePrivate *priv = NM_SUPPLICANT_INTERFACE_GET_PRIVATE(self);
     GBytes  *device_category;
-    // gsize   device_category_len;
     GBytes  *vendor_extensions;
-    // gsize  vendor_extensions_len;
+    char *config_type;
+    /*
+    if (wps_method & NM_SETTING_WIRELESS_SECURITY_WPS_METHOD_PBC) {
+        get_secret_flags |= NM_SECRET_AGENT_GET_SECRETS_FLAG_WPS_PBC_ACTIVE;
+        type = "pbc";
+    } else if (wps_method & NM_SETTING_WIRELESS_SECURITY_WPS_METHOD_PIN) {
+        type = "pin";
+    } else
+        type = NULL;
+    */
+    config_type = g_strdup("push_button");
+    if(p2p_config_data->config_methods) {
+        if(g_strcmp0(p2p_config_data->config_methods,NM_SETTING_WIFI_P2P_SECURITY_PIN_DISPLAY) == 0 ) {
+            config_type = g_strdup("display");
+        } else if(g_strcmp0(p2p_config_data->config_methods,NM_SETTING_WIFI_P2P_SECURITY_PUSH_BUTTON) == 0 ) {
+            config_type = g_strdup("push_button");
+        }
+    }
+    _LOGD("Set P2P ConfigMethods :: %s",config_type);
+
+
 
     if (!p2p_config_data->cancellable)
         p2p_config_data->cancellable = g_cancellable_new();
@@ -2035,7 +2054,7 @@ _p2p_call_set_device_config(NMSupplicantInterface *self, P2pConfigData *p2p_conf
                                 priv->object_path->str,
                                 NM_WPAS_DBUS_IFACE_INTERFACE_WPS,
                                 "ConfigMethods",
-                                g_variant_new_string("push_button"),
+                                g_variant_new_string(config_type),
                                 5000,
                                 NULL,
                                 _p2p_handle_set__config_methods_cb,
@@ -2162,7 +2181,6 @@ nm_supplicant_interface_create_p2p_device_config(NMSupplicantInterface *self,
                                                  gboolean               persistentReconnect)
 {
     _LOGD("Supplicant Interface wants to set wpas p2p-device-confg!");
-    // _p2p_start_device_config(self, primaryDeviceType, primarySubType, configMethods, goIntent);
     _p2p_start_device_config(self,
                              wps_config_methods,
                              wfd_host_name,
@@ -3133,6 +3151,8 @@ nm_supplicant_interface_p2p_connect(NMSupplicantInterface *self,
 
     g_return_if_fail(NM_IS_SUPPLICANT_INTERFACE(self));
 
+    _LOGD("Calling P2P-CONNECT with method:%s   pin:%s",wps_method, wps_pin);
+
     g_variant_builder_init(&builder, G_VARIANT_TYPE_VARDICT);
 
     g_variant_builder_add(&builder, "{sv}", "wps_method", g_variant_new_string(wps_method));
@@ -3163,6 +3183,24 @@ nm_supplicant_interface_p2p_cancel_connect(NMSupplicantInterface *self)
                                       G_VARIANT_TYPE("()"),
                                       "p2p-cancel",
                                       TRUE);
+}
+
+void
+nm_supplicant_interface_p2p_clear_config(NMSupplicantInterface *self)
+{
+    NMSupplicantInterfacePrivate *priv;
+    
+    g_return_if_fail(NM_IS_SUPPLICANT_INTERFACE(self));
+
+    priv  = NM_SUPPLICANT_INTERFACE_GET_PRIVATE(self);
+    _LOGD("nm_supplicant_interface_p2p_clear_config");
+
+
+    if(priv->p2p_config_data != NULL || !priv->dbus_connection != NULL) {
+        _LOGD("Clearing ProvisionDiscovery Signal Subscription");
+        nm_clear_g_dbus_connection_signal(priv->dbus_connection, &priv->p2p_config_data->pd_pin_req_signal_id);
+    }
+
 }
 
 void
@@ -3386,18 +3424,26 @@ _signal_handle(NMSupplicantInterface *self,
             const char           *status;
             const char           *parameter;
 
+            _LOGD("P2P: Got EAP Signal!");
             if (g_variant_is_of_type(parameters, G_VARIANT_TYPE("(ss)")))
                 return;
 
             g_variant_get(parameters, "(&s&s)", &status, &parameter);
 
-            if (nm_streq(status, "started"))
+            if (nm_streq(status, "started")){
+                _LOGD("P2P: Got EAP - Started Signal!");
                 auth_state = NM_SUPPLICANT_AUTH_STATE_STARTED;
+            }
             else if (nm_streq(status, "completion")) {
-                if (nm_streq(parameter, "success"))
+                _LOGD("P2P: Got EAP - Completion Signal!");
+                if (nm_streq(parameter, "success")) {
                     auth_state = NM_SUPPLICANT_AUTH_STATE_SUCCESS;
-                else if (nm_streq(parameter, "failure"))
+                    _LOGD("P2P: Got EAP - Completion - Success Signal!");
+                }
+                else if (nm_streq(parameter, "failure")){
                     auth_state = NM_SUPPLICANT_AUTH_STATE_FAILURE;
+                    _LOGD("P2P: Got EAP - Completion - Failure Signal!");
+                }
             }
 
             /* the state eventually reaches one of started, success or failure
@@ -3415,6 +3461,8 @@ _signal_handle(NMSupplicantInterface *self,
     if (nm_streq(signal_interface_name, NM_WPAS_DBUS_IFACE_INTERFACE_P2P_DEVICE)) {
         if (!priv->is_ready_p2p_device)
             return;
+
+        _LOGD("Received P2P Signal: %s", signal_name);
 
         if (nm_streq(signal_name, "DeviceFound")) {
             if (g_variant_is_of_type(parameters, G_VARIANT_TYPE("(o)"))) {
@@ -3545,13 +3593,17 @@ _signal_handle(NMSupplicantInterface *self,
             return;
         }
 
+        if(nm_streq(signal_name, "InvitationReceived")) {
+            if (g_variant_is_of_type(parameters, G_VARIANT_TYPE("(a{sv})"))){
+            //TODO: Handle P2P Invitation Requets
+            }
+        }
+
         if(nm_streq(signal_name, "GONegotiationRequest")) {
             if(g_variant_is_of_type(parameters, G_VARIANT_TYPE("(oqy)"))){
                 const char  *peer_path;
                 guint        pwd_id;
                 guint        peer_go_intent;
-
-                _LOGD("P2P: Got GONegotiationRequest Signal!");
 
                 g_variant_get(parameters, "(&oqy)", &peer_path, &pwd_id, &peer_go_intent);
 
@@ -3561,7 +3613,7 @@ _signal_handle(NMSupplicantInterface *self,
             }
         }
         if(nm_streq(signal_name, "GONegotiationFailure")) {
-            _LOGD("P2P: Got GONegotiationFailure Signal!");
+
         }
 
         return;
@@ -4075,6 +4127,17 @@ nm_supplicant_interface_class_init(NMSupplicantInterfaceClass *klass)
                                             G_TYPE_NONE,
                                             1,
                                             G_TYPE_VARIANT);
+
+    signals[PD_REQ] = g_signal_new(NM_SUPPLICANT_INTERFACE_PROVISION_DISCOVERY,
+                                G_OBJECT_CLASS_TYPE(object_class),
+                                G_SIGNAL_RUN_LAST,
+                                0,
+                                NULL,
+                                NULL,
+                                NULL,
+                                G_TYPE_NONE,
+                                1,
+                                G_TYPE_STRING);
 
     signals[GROUP_STARTED] = g_signal_new(NM_SUPPLICANT_INTERFACE_GROUP_STARTED,
                                           G_OBJECT_CLASS_TYPE(object_class),

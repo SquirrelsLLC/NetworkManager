@@ -84,6 +84,7 @@ typedef enum {
 #define NM_SUPPLICANT_INTERFACE_BSS_CHANGED     "bss-changed"
 #define NM_SUPPLICANT_INTERFACE_PEER_CHANGED    "peer-changed"
 #define NM_SUPPLICANT_INTERFACE_WPS_CREDENTIALS "wps-credentials"
+#define NM_SUPPLICANT_INTERFACE_PROVISION_DISCOVERY "provision-discovery"
 #define NM_SUPPLICANT_INTERFACE_GROUP_STARTED   "group-started"
 #define NM_SUPPLICANT_INTERFACE_GROUP_FINISHED  "group-finished"
 #define NM_SUPPLICANT_INTERFACE_GO_NEG_REQEUST  "go-neg-request"
@@ -182,6 +183,7 @@ void nm_supplicant_interface_p2p_connect(NMSupplicantInterface *self,
                                          const char            *wps_pin);
 void nm_supplicant_interface_p2p_cancel_connect(NMSupplicantInterface *self);
 void nm_supplicant_interface_p2p_disconnect(NMSupplicantInterface *self);
+void nm_supplicant_interface_p2p_clear_config(NMSupplicantInterface *self);
 
 void nm_supplicant_interface_set_global_capabilities(NMSupplicantInterface *self,
                                                      NMSupplCapMask         value);

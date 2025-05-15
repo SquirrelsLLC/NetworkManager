@@ -36,7 +36,7 @@
 
 /*****************************************************************************/
 
-NM_GOBJECT_PROPERTIES_DEFINE(NMDeviceWifiP2P, PROP_PEERS, );
+NM_GOBJECT_PROPERTIES_DEFINE(NMDeviceWifiP2P, PROP_PEERS, PROP_PIN, );
 
 typedef struct {
     NMSupplicantManager *sup_mgr;
@@ -58,7 +58,8 @@ typedef struct {
 
     /* Wi-Fi Display Components */
     _NMWifiP2pWfdDeviceMode wfd_device_mode;
-    guint broadcast_p2p_timeout_id;
+    char                   *provisioned_pin;
+    guint                   broadcast_p2p_timeout_id;
 
     bool is_waiting_for_supplicant : 1;
 } NMDeviceWifiP2PPrivate;
@@ -82,6 +83,7 @@ G_DEFINE_TYPE(NMDeviceWifiP2P, nm_device_wifi_p2p, NM_TYPE_DEVICE)
 static const NMDBusInterfaceInfoExtended interface_info_device_wifi_p2p;
 static const GDBusSignalInfo             nm_signal_info_wifi_p2p_peer_added;
 static const GDBusSignalInfo             nm_signal_info_wifi_p2p_peer_removed;
+static const GDBusSignalInfo             nm_signal_info_wifi_p2p_pin_provisioned;
 
 static void supplicant_group_interface_release(NMDeviceWifiP2P *self);
 static void supplicant_interfaces_release(NMDeviceWifiP2P *self, gboolean set_is_waiting);
@@ -167,8 +169,8 @@ check_connection_peer_joined(NMDeviceWifiP2P *device)
 
     if (!conn || !priv->group_iface)
         return FALSE;
-    //TODO: Fix the underlying causes that make this return FALSE for Wi-Fi display connections (namely windows client connections)
-    #if 0
+//TODO: Fix the underlying causes that make this return FALSE for Wi-Fi display connections (namely windows client connections)
+#if 0
     /* Comparing the object path found on the group_iface with the peers
      * found on the mgmt_iface is legal. */
     group = nm_supplicant_interface_get_p2p_group_path(priv->group_iface);
@@ -184,7 +186,7 @@ check_connection_peer_joined(NMDeviceWifiP2P *device)
     groups = nm_wifi_p2p_peer_get_groups(peer);
     if (!groups || !g_strv_contains(groups, group))
         return FALSE;
-    #endif
+#endif
     return TRUE;
 }
 
@@ -276,26 +278,26 @@ complete_connection(NMDevice            *device,
     const char       *setting_peer;
     const char       *wfd_mode;
 
-    _LOGD(LOGD_P2P,"Complete Connection");
+    _LOGD(LOGD_P2P, "Complete Connection");
 
     s_wifi_p2p =
         NM_SETTING_WIFI_P2P(nm_connection_get_setting(connection, NM_TYPE_SETTING_WIFI_P2P));
 
     wfd_mode = nm_setting_wifi_p2p_get_wfd_device_mode(s_wifi_p2p);
 
-    if(wfd_mode == NM_SETTING_WIFI_P2P_MODE_SINK) {
+    if (wfd_mode == NM_SETTING_WIFI_P2P_MODE_SINK) {
         /* Add a Wi-Fi P2P setting if one doesn't exist yet */
         s_wifi_p2p = _nm_connection_ensure_setting(connection, NM_TYPE_SETTING_WIFI_P2P);
 
         nm_utils_complete_generic(nm_device_get_platform(device),
-                                connection,
-                                NM_SETTING_WIFI_P2P_SETTING_NAME,
-                                existing_connections,
-                                "wfd-sink",
-                                "wfd-sink",
-                                NULL,
-                                NULL,
-                                TRUE);
+                                  connection,
+                                  NM_SETTING_WIFI_P2P_SETTING_NAME,
+                                  existing_connections,
+                                  "wfd-sink",
+                                  "wfd-sink",
+                                  NULL,
+                                  NULL,
+                                  TRUE);
     } else {
         if (!specific_object) {
             /* If not given a specific object, we need at minimum a peer address */
@@ -310,11 +312,12 @@ complete_connection(NMDevice            *device,
 
             setting_peer = nm_setting_wifi_p2p_get_peer(s_wifi_p2p);
             if (!setting_peer) {
-                g_set_error(error,
-                            NM_DEVICE_ERROR,
-                            NM_DEVICE_ERROR_INVALID_CONNECTION,
-                            "A '%s' setting with a valid Peer is required if no Peer path was given",
-                            NM_SETTING_WIFI_P2P_SETTING_NAME);
+                g_set_error(
+                    error,
+                    NM_DEVICE_ERROR,
+                    NM_DEVICE_ERROR_INVALID_CONNECTION,
+                    "A '%s' setting with a valid Peer is required if no Peer path was given",
+                    NM_SETTING_WIFI_P2P_SETTING_NAME);
                 return FALSE;
             }
 
@@ -339,14 +342,14 @@ complete_connection(NMDevice            *device,
 
         setting_name = g_strdup_printf("Wi-Fi P2P Peer %s", setting_peer);
         nm_utils_complete_generic(nm_device_get_platform(device),
-                                connection,
-                                NM_SETTING_WIFI_P2P_SETTING_NAME,
-                                existing_connections,
-                                setting_name,
-                                setting_name,
-                                NULL,
-                                NULL,
-                                TRUE);
+                                  connection,
+                                  NM_SETTING_WIFI_P2P_SETTING_NAME,
+                                  existing_connections,
+                                  setting_name,
+                                  setting_name,
+                                  NULL,
+                                  NULL,
+                                  TRUE);
     }
 
     return TRUE;
@@ -364,14 +367,14 @@ supplicant_find_timeout_cb(gpointer user_data)
     NMDeviceWifiP2P        *self   = NM_DEVICE_WIFI_P2P(user_data);
     NMDeviceWifiP2PPrivate *priv   = NM_DEVICE_WIFI_P2P_GET_PRIVATE(self);
 
-    if(priv->wfd_device_mode != _NM_WIFI_P2P_WFD_DEVICE_MODE_SINK) {
+    if (priv->wfd_device_mode != _NM_WIFI_P2P_WFD_DEVICE_MODE_SINK) {
         priv->find_peer_timeout_id = 0;
 
         nm_supplicant_interface_p2p_cancel_connect(priv->mgmt_iface);
 
         if (nm_device_is_activating(device)) {
             _LOGW(LOGD_DEVICE | LOGD_WIFI,
-                "Activation: (wifi-p2p) could not find peer, failing activation");
+                  "Activation: (wifi-p2p) could not find peer, failing activation");
             nm_device_state_changed(device,
                                     NM_DEVICE_STATE_FAILED,
                                     NM_DEVICE_STATE_REASON_PEER_NOT_FOUND);
@@ -395,8 +398,8 @@ act_stage1_prepare(NMDevice *device, NMDeviceStateReason *out_failure_reason)
     NMWifiP2PPeer          *peer;
     const char             *wfd_mode;
 
-    _LOGD(LOGD_P2P,"Act_Stage 1 :: Prepare!");
-    
+    _LOGD(LOGD_P2P, "Act_Stage 1 :: Prepare!");
+
     if (!priv->mgmt_iface) {
         NM_SET_OUT(out_failure_reason, NM_DEVICE_STATE_REASON_SUPPLICANT_FAILED);
         return NM_ACT_STAGE_RETURN_FAILURE;
@@ -412,16 +415,18 @@ act_stage1_prepare(NMDevice *device, NMDeviceStateReason *out_failure_reason)
     wfd_mode = nm_setting_wifi_p2p_get_wfd_device_mode(s_wifi_p2p);
     if (g_strcmp0(wfd_mode, NM_SETTING_WIFI_P2P_MODE_SINK) == 0) {
         priv->wfd_device_mode = _NM_WIFI_P2P_WFD_DEVICE_MODE_SINK;
-    }
-    else if (g_strcmp0(wfd_mode, NM_SETTING_WIFI_P2P_MODE_SOURCE) == 0) {
+    } else if (g_strcmp0(wfd_mode, NM_SETTING_WIFI_P2P_MODE_SOURCE) == 0) {
         priv->wfd_device_mode = _NM_WIFI_P2P_WFD_DEVICE_MODE_SOURCE;
     } else {
         priv->wfd_device_mode = _NM_WIFI_P2P_WFD_DEVICE_MODE_NONE;
     }
-    _LOGD(LOGD_P2P,"Act_Stage 1 :: Set WFD Mode : %s",wfd_mode);
+    _LOGD(LOGD_P2P, "Act_Stage 1 :: Set WFD Mode : %s", wfd_mode);
 
-    if(priv->wfd_device_mode != _NM_WIFI_P2P_WFD_DEVICE_MODE_SINK) {
-        _LOGD(LOGD_P2P,"Act_Stage 1 :: WFD_SOURCE or Normal P2P - activating connection with Peer");
+    priv->provisioned_pin = NULL;
+
+    if (priv->wfd_device_mode != _NM_WIFI_P2P_WFD_DEVICE_MODE_SINK) {
+        _LOGD(LOGD_P2P,
+              "Act_Stage 1 :: WFD_SOURCE or Normal P2P - activating connection with Peer");
         peer = nm_wifi_p2p_peers_find_first_compatible(&priv->peers_lst_head, connection, FALSE);
         if (!peer) {
             /* Set up a timeout on the find attempt and run a find for the same period of time */
@@ -434,7 +439,7 @@ act_stage1_prepare(NMDevice *device, NMDeviceStateReason *out_failure_reason)
             return NM_ACT_STAGE_RETURN_POSTPONE;
         }
     } else {
-        _LOGD(LOGD_P2P,"Act_Stage 1 :: WFD_SINK - proceeding with SINK connection activation");
+        _LOGD(LOGD_P2P, "Act_Stage 1 :: WFD_SINK - proceeding with SINK connection activation");
     }
 
     return NM_ACT_STAGE_RETURN_SUCCESS;
@@ -471,7 +476,6 @@ supplicant_connection_timeout_cb(gpointer user_data)
 static NMActStageReturn
 act_stage2_config(NMDevice *device, NMDeviceStateReason *out_failure_reason)
 {
-    
     NMDeviceWifiP2P        *self = NM_DEVICE_WIFI_P2P(device);
     NMDeviceWifiP2PPrivate *priv = NM_DEVICE_WIFI_P2P_GET_PRIVATE(self);
     NMConnection           *connection;
@@ -480,12 +484,12 @@ act_stage2_config(NMDevice *device, NMDeviceStateReason *out_failure_reason)
     GBytes                 *wfd_ies;
     GBytes                 *wfd_vendor_extensions;
     GBytes                 *wfd_device_category;
-    const char             *wfd_host_name;
-    const char             *wfd_config_methods;
-    
-    _LOGD(LOGD_P2P,"Act_Stage 2 :: Config!");
-    
-    if(priv->wfd_device_mode != _NM_WIFI_P2P_WFD_DEVICE_MODE_SINK) {
+    char             *wfd_host_name;
+    char             *wfd_config_method;
+
+    _LOGD(LOGD_P2P, "Act_Stage 2 :: Config!");
+
+    if (priv->wfd_device_mode != _NM_WIFI_P2P_WFD_DEVICE_MODE_SINK) {
         if (nm_clear_g_source(&priv->find_peer_timeout_id))
             nm_assert_not_reached();
     }
@@ -501,36 +505,43 @@ act_stage2_config(NMDevice *device, NMDeviceStateReason *out_failure_reason)
         NM_IS_SETTING_WIFI_P2P(nm_connection_get_setting(connection, NM_TYPE_SETTING_WIFI_P2P)));
 
     // Not that it would really matter, but if this is not a WFD p2p device, we don't need to set any WFD IEs
-    if(priv->wfd_device_mode != _NM_WIFI_P2P_WFD_DEVICE_MODE_NONE) {
-
-        _LOGD(LOGD_P2P,"Act_Stage 2 ::  This is a WFD P2P device, calling supplicant_manager to set global WFD IEs in wpa_supplicant");
+    if (priv->wfd_device_mode != _NM_WIFI_P2P_WFD_DEVICE_MODE_NONE) {
+        _LOGD(LOGD_P2P,
+              "Act_Stage 2 ::  This is a WFD P2P device, calling supplicant_manager to set global "
+              "WFD IEs in wpa_supplicant");
 
         /* Set the WFD IEs before trying to establish the connection. */
-        s_wifi_p2p = NM_SETTING_WIFI_P2P(nm_connection_get_setting(connection, NM_TYPE_SETTING_WIFI_P2P));
+        s_wifi_p2p =
+            NM_SETTING_WIFI_P2P(nm_connection_get_setting(connection, NM_TYPE_SETTING_WIFI_P2P));
 
         wfd_ies = nm_setting_wifi_p2p_get_wfd_ies(s_wifi_p2p);
         nm_supplicant_manager_set_wfd_ies(priv->sup_mgr, wfd_ies);
 
         wfd_vendor_extensions = nm_setting_wifi_p2p_get_vendor_extension_ies(s_wifi_p2p);
-        _LOGD(LOGD_P2P, "Vender Extension Len: %i",g_bytes_get_size(wfd_vendor_extensions));
+        _LOGD(LOGD_P2P, "Vender Extension Len: %i", g_bytes_get_size(wfd_vendor_extensions));
         wfd_device_category = nm_setting_wifi_p2p_get_wfd_device_category(s_wifi_p2p);
-        _LOGD(LOGD_P2P, "Device Category Len: %i",g_bytes_get_size(wfd_device_category));
+        _LOGD(LOGD_P2P, "Device Category Len: %i", g_bytes_get_size(wfd_device_category));
         wfd_host_name = nm_setting_wifi_p2p_get_wfd_host_name(s_wifi_p2p);
+        _LOGD(LOGD_P2P, "Device Host Name: %s", wfd_host_name);
+        wfd_config_method = nm_setting_wifi_p2p_get_wfd_security(s_wifi_p2p);
 
-        _LOGD(LOGD_P2P,"Act_Stage 2 ::  Attempting to set wpa_supplicant P2P data");
-        nm_supplicant_interface_create_p2p_device_config(priv->mgmt_iface,
-                                                        "pbc",
-                                                        wfd_host_name,
-                                                        wfd_device_category,
-                                                        wfd_vendor_extensions,
-                                                        7,  // TODO: export goIntent as a p2p_setting 
-                                                        1); // TODO: export persistentReconnect as a p2p_setting
 
-        _LOGD(LOGD_P2P,"Act_Stage 2 ::  Activating p2p_start_find(10) on management interface");
+        _LOGD(LOGD_P2P, "Act_Stage 2 ::  Attempting to set wpa_supplicant P2P data");
+        nm_supplicant_interface_create_p2p_device_config(
+            priv->mgmt_iface,
+            wfd_config_method,
+            wfd_host_name,
+            wfd_device_category,
+            wfd_vendor_extensions,
+            7,   // TODO: export goIntent as a p2p_setting
+            FALSE);  // TODO: export persistentReconnect as a p2p_setting
+
+        _LOGD(LOGD_P2P, "Act_Stage 2 ::  Activating p2p_start_find(10) on management interface");
 
         /* Set up a timeout on the find attempt and run a find for the same period of time */
         if (priv->find_peer_timeout_id == 0) {
-            priv->find_peer_timeout_id = g_timeout_add_seconds(10, supplicant_find_timeout_cb, self);
+            priv->find_peer_timeout_id =
+                g_timeout_add_seconds(10, supplicant_find_timeout_cb, self);
 
             nm_supplicant_interface_p2p_start_find(priv->mgmt_iface, 10);
             // nm_supplicant_interface_p2p_start_listen(priv->mgmt_iface, 10);
@@ -539,7 +550,7 @@ act_stage2_config(NMDevice *device, NMDeviceStateReason *out_failure_reason)
     }
 
     // WFD Sink devices will not be concered with connecting to a peer at this time
-    if(priv->wfd_device_mode != _NM_WIFI_P2P_WFD_DEVICE_MODE_SINK) {
+    if (priv->wfd_device_mode != _NM_WIFI_P2P_WFD_DEVICE_MODE_SINK) {
         /* The prepare stage ensures that the peer has been found */
         peer = nm_wifi_p2p_peers_find_first_compatible(&priv->peers_lst_head, connection, FALSE);
         if (!peer) {
@@ -556,7 +567,8 @@ act_stage2_config(NMDevice *device, NMDeviceStateReason *out_failure_reason)
 
         /* Set up a timeout on the connect attempt */
         if (priv->sup_timeout_id == 0) {
-            priv->sup_timeout_id = g_timeout_add_seconds(45, supplicant_connection_timeout_cb, self);
+            priv->sup_timeout_id =
+                g_timeout_add_seconds(45, supplicant_connection_timeout_cb, self);
         }
     }
 
@@ -577,6 +589,18 @@ emit_signal_p2p_peer_add_remove(NMDeviceWifiP2P *device,
                                         : &nm_signal_info_wifi_p2p_peer_removed,
                                "(o)",
                                nm_dbus_object_get_path(NM_DBUS_OBJECT(peer)));
+}
+
+static void
+emit_signal_p2p_pin_provisioned(NMDeviceWifiP2P *self, char *pin)
+{
+    _LOGD(LOGD_P2P, "Emitting PinProvisioned Signal With %s", pin);
+
+    nm_dbus_object_emit_signal(NM_DBUS_OBJECT(self),
+                               &interface_info_device_wifi_p2p,
+                               &nm_signal_info_wifi_p2p_pin_provisioned,
+                               "(s)",
+                               pin);
 }
 
 static void
@@ -622,10 +646,12 @@ peer_add_remove(NMDeviceWifiP2P *self,
 
             peer =
                 nm_wifi_p2p_peers_find_first_compatible(&priv->peers_lst_head, connection, FALSE);
-            if (peer) {
-                /* A peer for the connection was found, cancel the timeout and go to configure state. */
-                nm_clear_g_source(&priv->find_peer_timeout_id);
-                nm_device_activate_schedule_stage1_device_prepare(device, FALSE);
+            if (priv->wfd_device_mode != NM_WIFI_P2P_WFD_DEVICE_MODE_SINK) {
+                if (peer) {
+                    /* A peer for the connection was found, cancel the timeout and go to configure state. */
+                    nm_clear_g_source(&priv->find_peer_timeout_id);
+                    nm_device_activate_schedule_stage1_device_prepare(device, FALSE);
+                }
             }
         }
 
@@ -655,19 +681,18 @@ remove_all_peers(NMDeviceWifiP2P *self)
 static void
 act_stage3_ip_config(NMDevice *device, int addr_family)
 {
-    NMDeviceWifiP2P        *self = NM_DEVICE_WIFI_P2P(device);
+    NMDeviceWifiP2P        *self    = NM_DEVICE_WIFI_P2P(device);
     NMDeviceWifiP2PPrivate *priv    = NM_DEVICE_WIFI_P2P_GET_PRIVATE(self);
     const int               IS_IPv4 = NM_IS_IPv4(addr_family);
     gboolean                indicate_addressing_running;
     NMConnection           *connection;
     const char             *method;
 
-    _LOGD(LOGD_P2P,"Act_Stage 3 :: ip_config!");
+    _LOGD(LOGD_P2P, "Act_Stage 3 :: ip_config!");
 
     // WFD Sink devices perform continuous p2p_find / p2p_listen calls during act_stage_2. We need to stop the chain here
-    if(priv->wfd_device_mode == _NM_WIFI_P2P_WFD_DEVICE_MODE_SINK){
-
-        if(nm_clear_g_source(&priv->find_peer_timeout_id)) {
+    if (priv->wfd_device_mode == _NM_WIFI_P2P_WFD_DEVICE_MODE_SINK) {
+        if (nm_clear_g_source(&priv->find_peer_timeout_id)) {
             _LOGD(LOGD_P2P, "Successfully cleared find_peer_timeout source");
         } else {
             _LOGD(LOGD_P2P, "No find_peer_timeout source to clear");
@@ -690,13 +715,13 @@ act_stage3_ip_config(NMDevice *device, int addr_family)
             NMPlatformIP4Address                    address = {
                                    .addr_source = NM_IP_CONFIG_SOURCE_DHCP,
             };
-            
+
             nm_platform_ip4_address_set_addr(&address, addr, plen);
 
             l3cd = nm_device_create_l3_config_data(device, NM_IP_CONFIG_SOURCE_DHCP);
             nm_l3_config_data_add_address_4(l3cd, &address);
 
-            if(nm_supplicant_interface_get_p2p_assigned_go(priv->group_iface, &go_addr)) {
+            if (nm_supplicant_interface_get_p2p_assigned_go(priv->group_iface, &go_addr)) {
                 const NMPlatformIP4Route r = {
                     .rt_source     = NM_IP_CONFIG_SOURCE_DHCP,
                     .gateway       = go_addr,
@@ -707,7 +732,7 @@ act_stage3_ip_config(NMDevice *device, int addr_family)
                 };
                 nm_l3_config_data_add_route_4(l3cd, &r);
             }
-            
+
             nm_device_devip_set_state(device, AF_INET, NM_DEVICE_IP_STATE_READY, l3cd);
 
             /* This just disables the addressing indicator. */
@@ -740,8 +765,11 @@ deactivate(NMDevice *device)
     nm_clear_g_source(&priv->sup_timeout_id);
     nm_clear_g_source(&priv->peer_missing_id);
 
-    if (priv->mgmt_iface)
+    if (priv->mgmt_iface) {
         nm_supplicant_interface_p2p_cancel_connect(priv->mgmt_iface);
+
+        nm_supplicant_interface_p2p_clear_config(priv->mgmt_iface);
+    }
 
     if (priv->group_iface)
         nm_supplicant_interface_p2p_disconnect(priv->group_iface);
@@ -1005,47 +1033,73 @@ supplicant_iface_group_started_cb(NMSupplicantInterface *iface,
 }
 
 static void
-supplicant_iface_go_neg_request_cb(NMSupplicantInterface *iface, char *peer_path, guint pwd_id, guint peer_go_intent, void *user_data)
+supplicant_iface_provision_discovery_request_cb(NMSupplicantInterface *iface,
+                                                char            *generated_pin,
+                                                void                  *user_data)
 {
-    NMDeviceWifiP2P *self = NM_DEVICE_WIFI_P2P(user_data);
+    NMDeviceWifiP2P        *self = NM_DEVICE_WIFI_P2P(user_data);
+    NMDeviceWifiP2PPrivate *priv;
+
+    priv = NM_DEVICE_WIFI_P2P_GET_PRIVATE(self);
+
+    priv->provisioned_pin = g_strdup(generated_pin);
+    
+    _LOGD(LOGD_P2P, "Got P2P Provision Discovery Request With PIN %s", priv->provisioned_pin);
+
+    emit_signal_p2p_pin_provisioned(self, priv->provisioned_pin);
+
+    _notify(self, PROP_PIN);
+}
+
+static void
+supplicant_iface_go_neg_request_cb(NMSupplicantInterface *iface,
+                                   char                  *peer_path,
+                                   guint                  pwd_id,
+                                   guint                  peer_go_intent,
+                                   void                  *user_data)
+{
+    NMDeviceWifiP2P           *self = NM_DEVICE_WIFI_P2P(user_data);
     NMDeviceWifiP2PPrivate    *priv;
     NMSupplicantInterfaceState state;
-    NMSettingWifiP2P *s_wifi_p2p;
-    NMConnection *connection;
-    NMWifiP2PPeer *peer;
-    const char       *setting_peer;
+    NMSettingWifiP2P          *s_wifi_p2p;
+    NMConnection              *connection;
+    NMWifiP2PPeer             *peer;
+    const char                *setting_peer;
+    const char                *p2p_security;
 
     g_return_if_fail(self);
 
     priv = NM_DEVICE_WIFI_P2P_GET_PRIVATE(self);
 
     _LOGD(LOGD_P2P, "Got P2P Go Negotiation Request from %s", peer_path);
-    peer = nm_wifi_p2p_peers_find_by_supplicant_path(&priv->peers_lst_head,peer_path);
+    peer = nm_wifi_p2p_peers_find_by_supplicant_path(&priv->peers_lst_head, peer_path);
     if (!peer) {
         _LOGD(LOGD_P2P, "Go-Negotiation-Request :: Peer is unkown!");
-        
+
     } else {
         setting_peer = nm_wifi_p2p_peer_get_address(peer);
         /* Add a Wi-Fi P2P setting if one doesn't exist yet */
         connection = nm_device_get_applied_connection(NM_DEVICE(self));
-        if(connection){
+        if (connection) {
             s_wifi_p2p = _nm_connection_ensure_setting(connection, NM_TYPE_SETTING_WIFI_P2P);
-            if(s_wifi_p2p) {
+            if (s_wifi_p2p) {
                 g_object_set(G_OBJECT(s_wifi_p2p), NM_SETTING_WIFI_P2P_PEER, setting_peer, NULL);
                 _LOGD(LOGD_P2P, "Adding Peer to connection settings");
-                
+                p2p_security = nm_setting_wifi_p2p_get_wfd_security(s_wifi_p2p);
+
             } else {
-                _LOGD(LOGD_P2P, "Unable to ensure WifiP2P Settings exists in applied connection!!!");
+                _LOGD(LOGD_P2P,
+                      "Unable to ensure WifiP2P Settings exists in applied connection!!!");
+                      p2p_security = NM_SETTING_WIFI_P2P_SECURITY_PUSH_BUTTON;
             }
         } else {
-            _LOGD(LOGD_P2P,"Unable to fetch applied connection!!!");
+            _LOGD(LOGD_P2P, "Unable to fetch applied connection!!!");
+            p2p_security = NM_SETTING_WIFI_P2P_SECURITY_PUSH_BUTTON;
         }
     }
 
-
-
-    _LOGD(LOGD_DEVICE | LOGD_P2P, "Attempting to connect with peer...");
-    nm_supplicant_interface_p2p_connect(priv->mgmt_iface,peer_path,"pbc",NULL);
+    _LOGD(LOGD_DEVICE | LOGD_P2P, "Attempting to connect with peer. Method: %s",p2p_security);
+    nm_supplicant_interface_p2p_connect(priv->mgmt_iface, peer_path, p2p_security, (priv->provisioned_pin) ? priv->provisioned_pin : NULL );
 
     /* Set up a timeout on the connect attempt */
     if (priv->sup_timeout_id == 0) {
@@ -1336,6 +1390,10 @@ nm_device_wifi_p2p_set_mgmt_iface(NMDeviceWifiP2P *self, NMSupplicantInterface *
                      G_CALLBACK(supplicant_iface_peer_changed_cb),
                      self);
     g_signal_connect(priv->mgmt_iface,
+                     NM_SUPPLICANT_INTERFACE_PROVISION_DISCOVERY,
+                     G_CALLBACK(supplicant_iface_provision_discovery_request_cb),
+                     self);
+    g_signal_connect(priv->mgmt_iface,
                      NM_SUPPLICANT_INTERFACE_GROUP_STARTED,
                      G_CALLBACK(supplicant_iface_group_started_cb),
                      self);
@@ -1360,8 +1418,8 @@ nm_device_wifi_p2p_remove(NMDeviceWifiP2P *self)
 }
 
 void
-nm_device_wifi_p2p_set_mgmt_wfd_ies(NMDeviceWifiP2P *self, GBytes *ies) {
-    
+nm_device_wifi_p2p_set_mgmt_wfd_ies(NMDeviceWifiP2P *self, GBytes *ies)
+{
     NMDeviceWifiP2PPrivate *priv;
 
     g_return_if_fail(NM_IS_DEVICE_WIFI_P2P(self));
@@ -1370,7 +1428,6 @@ nm_device_wifi_p2p_set_mgmt_wfd_ies(NMDeviceWifiP2P *self, GBytes *ies) {
     priv = NM_DEVICE_WIFI_P2P_GET_PRIVATE(self);
     _LOGD(LOGD_DEVICE | LOGD_WIFI, "Setting WFD IEs");
     nm_supplicant_manager_set_wfd_ies(priv->sup_mgr, ies);
-
 }
 
 /*****************************************************************************/
@@ -1392,6 +1449,11 @@ static const GDBusSignalInfo nm_signal_info_wifi_p2p_peer_removed =
         "PeerRemoved",
         .args = NM_DEFINE_GDBUS_ARG_INFOS(NM_DEFINE_GDBUS_ARG_INFO("peer", "o"), ), );
 
+static const GDBusSignalInfo nm_signal_info_wifi_p2p_pin_provisioned =
+    NM_DEFINE_GDBUS_SIGNAL_INFO_INIT(
+        "PinProvisioned",
+        .args = NM_DEFINE_GDBUS_ARG_INFOS(NM_DEFINE_GDBUS_ARG_INFO("pin", "s"), ), );
+
 static const NMDBusInterfaceInfoExtended interface_info_device_wifi_p2p = {
     .parent = NM_DEFINE_GDBUS_INTERFACE_INFO_INIT(
         NM_DBUS_INTERFACE_DEVICE_WIFI_P2P,
@@ -1405,16 +1467,16 @@ static const NMDBusInterfaceInfoExtended interface_info_device_wifi_p2p = {
             NM_DEFINE_DBUS_METHOD_INFO_EXTENDED(NM_DEFINE_GDBUS_METHOD_INFO_INIT("StopFind", ),
                                                 .handle = impl_device_wifi_p2p_stop_find, ), ),
         .signals    = NM_DEFINE_GDBUS_SIGNAL_INFOS(&nm_signal_info_wifi_p2p_peer_added,
-                                                &nm_signal_info_wifi_p2p_peer_removed, ),
+                                                &nm_signal_info_wifi_p2p_peer_removed,
+                                                &nm_signal_info_wifi_p2p_pin_provisioned, ),
         .properties = NM_DEFINE_GDBUS_PROPERTY_INFOS(
             NM_DEFINE_DBUS_PROPERTY_INFO_EXTENDED_READABLE(
                 "HwAddress",
                 "s",
                 NM_DEVICE_HW_ADDRESS,
                 .annotations = NM_GDBUS_ANNOTATION_INFO_LIST_DEPRECATED(), ),
-            NM_DEFINE_DBUS_PROPERTY_INFO_EXTENDED_READABLE("Peers",
-                                                           "ao",
-                                                           NM_DEVICE_WIFI_P2P_PEERS), ), ),
+            NM_DEFINE_DBUS_PROPERTY_INFO_EXTENDED_READABLE("Peers", "ao", NM_DEVICE_WIFI_P2P_PEERS),
+            NM_DEFINE_DBUS_PROPERTY_INFO_EXTENDED_READABLE("Pin", "s", NM_DEVICE_WIFI_P2P_PIN), ), ),
 };
 
 /*****************************************************************************/
@@ -1430,6 +1492,9 @@ get_property(GObject *object, guint prop_id, GValue *value, GParamSpec *pspec)
     case PROP_PEERS:
         list = nm_wifi_p2p_peers_get_paths(&priv->peers_lst_head);
         g_value_take_boxed(value, nm_strv_make_deep_copied(list));
+        break;
+    case PROP_PIN:
+        g_value_set_string(value, priv->provisioned_pin);
         break;
     default:
         G_OBJECT_WARN_INVALID_PROPERTY_ID(object, prop_id, pspec);
@@ -1540,6 +1605,8 @@ nm_device_wifi_p2p_class_init(NMDeviceWifiP2PClass *klass)
                                                     "",
                                                     G_TYPE_STRV,
                                                     G_PARAM_READABLE | G_PARAM_STATIC_STRINGS);
+    obj_properties[PROP_PIN] =
+        g_param_spec_string(NM_DEVICE_WIFI_P2P_PIN, "", "", NULL, G_PARAM_READABLE);
 
     g_object_class_install_properties(object_class, _PROPERTY_ENUMS_LAST, obj_properties);
 }

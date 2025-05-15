@@ -28,6 +28,7 @@ G_BEGIN_DECLS
 #define NM_DEVICE_WIFI_P2P_HW_ADDRESS "hw-address"
 #define NM_DEVICE_WIFI_P2P_PEERS      "peers"
 #define NM_DEVICE_WIFI_P2P_WFDIES     "wfdies"
+#define NM_DEVICE_WIFI_P2P_PIN        "pin"
 
 /**
  * NMDeviceWifiP2P:
@@ -68,6 +69,8 @@ void nm_device_wifi_p2p_stop_find(NMDeviceWifiP2P    *device,
 NM_AVAILABLE_IN_1_16
 gboolean
 nm_device_wifi_p2p_stop_find_finish(NMDeviceWifiP2P *device, GAsyncResult *result, GError **error);
+
+const char *nm_device_wifi_p2p_get_pin(NMDeviceWifiP2P *device);
 
 G_END_DECLS
 

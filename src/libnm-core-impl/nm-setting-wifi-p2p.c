@@ -39,7 +39,8 @@ NM_GOBJECT_PROPERTIES_DEFINE_BASE(PROP_PEER,
                                   PROP_WFD_VENDOR_EXTENSIONS,
                                   PROP_WFD_DEVICE_MODE,
                                   PROP_WFD_HOST_NAME,
-                                  PROP_WFD_DEVICE_CATEGORY, );
+                                  PROP_WFD_DEVICE_CATEGORY,
+                                  PROP_WFD_SECURITY, );
 
 typedef struct {
     char *peer;
@@ -50,6 +51,7 @@ typedef struct {
     GBytes *wfd_vendor_extensions;
     GBytes *wfd_device_category;
     char   *wfd_device_mode;
+    char   *wfd_security_type;
     char   *wfd_host_name;
 
 
@@ -180,6 +182,21 @@ nm_setting_wifi_p2p_get_wfd_host_name(NMSettingWifiP2P *setting)
     return NM_SETTING_WIFI_P2P_GET_PRIVATE(setting)->wfd_host_name;
 }
 
+/**
+ * nm_setting_wifi_p2p_get_wfd_security
+ * @setting: the #NMSettingWiFiP2P
+ * 
+ * Returns: the #NMSettingWifiP2P:wfd-security property of the setting
+ * 
+ * since 1.36
+ */
+const char *nm_setting_wifi_p2p_get_wfd_security(NMSettingWifiP2P *setting)
+{
+    g_return_val_if_fail(NM_IS_SETTING_WIFI_P2P(setting), NULL);
+
+    return NM_SETTING_WIFI_P2P_GET_PRIVATE(setting)->wfd_security_type;
+}
+
 /*****************************************************************************/
 
 static gboolean
@@ -190,6 +207,9 @@ verify(NMSetting *setting, NMConnection *connection, GError **error)
                                               NM_SETTING_WIFI_P2P_MODE_SINK,
                                               NM_SETTING_WIFI_P2P_MODE_SOURCE,
                                               NULL};
+    const char              *valid_security[] = {NM_SETTING_WIFI_P2P_SECURITY_PUSH_BUTTON,
+                                                NM_SETTING_WIFI_P2P_SECURITY_PIN_DISPLAY,
+                                                NULL};
 
     if (priv->wfd_device_mode && !g_strv_contains(valid_modes, priv->wfd_device_mode)) {
         g_set_error(error,
@@ -201,6 +221,19 @@ verify(NMSetting *setting, NMConnection *connection, GError **error)
                        "%s.%s: ",
                        NM_SETTING_WIFI_P2P_SETTING_NAME,
                        NM_SETTING_WIFI_P2P_WFD_DEVICE_MODE);
+        return FALSE;
+    }
+
+    if (priv->wfd_security_type && !g_strv_contains(valid_security, priv->wfd_security_type)) {
+        g_set_error(error,
+                    NM_CONNECTION_ERROR,
+                    NM_CONNECTION_ERROR_INVALID_PROPERTY,
+                    _("'%s' is not a valid P2P WFD security type"),
+                    priv->wfd_security_type);
+        g_prefix_error(error,
+                       "%s.%s: ",
+                       NM_SETTING_WIFI_P2P_SETTING_NAME,
+                       NM_SETTING_WIFI_P2P_WFD_DEVICE_CATEGORY);
         return FALSE;
     }
 
@@ -414,6 +447,21 @@ nm_setting_wifi_p2p_class_init(NMSettingWifiP2PClass *setting_wifi_p2p_class)
                                               NM_SETTING_PARAM_FUZZY_IGNORE,
                                               NMSettingWifiP2P,
                                               _priv.wfd_device_category);
+
+    /**
+     * NMSettingWifiP2P:wfd-security:
+     *
+     * Security type used for p2p connections
+     *
+     * Since: 1.36
+     */
+    _nm_setting_property_define_direct_string(properties_override,
+                                                obj_properties,
+                                                NM_SETTING_WIFI_P2P_WFD_SECURITY,
+                                                PROP_WFD_SECURITY,
+                                                NM_SETTING_PARAM_NONE,
+                                                NMSettingWifiP2P,
+                                                _priv.wfd_security_type);
 
     /**
      * NMSettingWifiP2P:wfd-vendor-extensions:
