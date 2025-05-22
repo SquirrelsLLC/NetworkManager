@@ -40,7 +40,10 @@ NM_GOBJECT_PROPERTIES_DEFINE_BASE(PROP_PEER,
                                   PROP_WFD_DEVICE_MODE,
                                   PROP_WFD_HOST_NAME,
                                   PROP_WFD_DEVICE_CATEGORY,
-                                  PROP_WFD_SECURITY, );
+                                  PROP_WFD_SECURITY,
+                                  PROP_WFD_LISTEN_ONLY,
+                                  PROP_WFD_LISTEN_PERIOD,
+                                  PROP_WFD_LISTEN_INTERVAL, );
 
 typedef struct {
     char *peer;
@@ -53,6 +56,11 @@ typedef struct {
     char   *wfd_device_mode;
     char   *wfd_security_type;
     char   *wfd_host_name;
+
+    /* Wi-Fi Display settings mostly for troubleshooting performance of p2p_find vs p2p_listen and the timing of calls on different platforms */
+    bool     wfd_listen_only;
+    gint32  wfd_listen_period;
+    gint32  wfd_listen_interval;
 
 
 } NMSettingWifiP2PPrivate;
@@ -197,6 +205,26 @@ const char *nm_setting_wifi_p2p_get_wfd_security(NMSettingWifiP2P *setting)
     return NM_SETTING_WIFI_P2P_GET_PRIVATE(setting)->wfd_security_type;
 }
 
+gboolean nm_setting_wifi_p2p_get_wfd_listen_only(NMSettingWifiP2P *setting)
+{
+    g_return_val_if_fail(NM_IS_SETTING_WIFI_P2P(setting), NULL);
+
+    return NM_SETTING_WIFI_P2P_GET_PRIVATE(setting)->wfd_listen_only;
+}
+
+gint nm_setting_wifi_p2p_get_wfd_listen_period(NMSettingWifiP2P *setting)
+{
+    g_return_val_if_fail(NM_IS_SETTING_WIFI_P2P(setting), NULL);
+
+    return NM_SETTING_WIFI_P2P_GET_PRIVATE(setting)->wfd_listen_period; 
+}
+
+gint nm_setting_wifi_p2p_get_wfd_listen_interval(NMSettingWifiP2P *setting)
+{
+    g_return_val_if_fail(NM_IS_SETTING_WIFI_P2P(setting), NULL);
+
+    return NM_SETTING_WIFI_P2P_GET_PRIVATE(setting)->wfd_listen_interval;
+}
 /*****************************************************************************/
 
 static gboolean
@@ -261,6 +289,8 @@ verify(NMSetting *setting, NMConnection *connection, GError **error)
                            NM_SETTING_WIFI_P2P_SETTING_NAME,
                            NM_SETTING_WIFI_P2P_WFD_HOST_NAME);
         }
+
+        
         
     }
     // Settings verification that is specific to Miracast Sources and Sinks. These settings do not apply to standard p2p connections
@@ -315,6 +345,43 @@ verify(NMSetting *setting, NMConnection *connection, GError **error)
 
     // General setting verification that should apply to ALL p2p devices
 
+    if(priv->wfd_listen_period <= 0 || priv->wfd_listen_period >= 600) {
+        g_set_error(error,
+                    NM_CONNECTION_ERROR,
+                    NM_CONNECTION_ERROR_INVALID_PROPERTY,
+                    _("'%i' is not a valid listen period. Value must be between 0-600 (exclusive)"),
+                    priv->wfd_listen_period);
+        g_prefix_error(error,
+                       "%s.%s: ",
+                       NM_SETTING_WIFI_P2P_SETTING_NAME,
+                       NM_SETTING_WIFI_P2P_WFD_LISTEN_PERIOD );
+        return FALSE;
+    }
+
+    if(priv->wfd_listen_interval <= 0 || priv->wfd_listen_period >= 600) {
+        g_set_error(error,
+                    NM_CONNECTION_ERROR,
+                    NM_CONNECTION_ERROR_INVALID_PROPERTY,
+                    _("'%i' is not a valid listen interval. Value must be between 0-600 (exclusive)"),
+                    priv->wfd_listen_period);
+        g_prefix_error(error,
+                       "%s.%s: ",
+                       NM_SETTING_WIFI_P2P_SETTING_NAME,
+                       NM_SETTING_WIFI_P2P_WFD_LISTEN_INTERVAL );
+        return FALSE;
+
+    } else if(priv->wfd_listen_interval < priv->wfd_listen_period) {
+        g_set_error(error,
+                    NM_CONNECTION_ERROR,
+                    NM_CONNECTION_ERROR_INVALID_PROPERTY,
+                    _("'%i' is not a valid listen interval. Value must be greater or equal to listen period"),
+                    priv->wfd_listen_period);
+        g_prefix_error(error,
+                       "%s.%s: ",
+                       NM_SETTING_WIFI_P2P_SETTING_NAME,
+                       NM_SETTING_WIFI_P2P_WFD_LISTEN_INTERVAL );
+        return FALSE;
+    }
 
     if (!_nm_utils_wps_method_validate(priv->wps_method,
                                        NM_SETTING_WIFI_P2P_SETTING_NAME,
@@ -463,6 +530,58 @@ nm_setting_wifi_p2p_class_init(NMSettingWifiP2PClass *setting_wifi_p2p_class)
                                                 NMSettingWifiP2P,
                                                 _priv.wfd_security_type);
 
+
+                                                /**
+     * NMSettingWifiP2P:wfd-listen-only:
+     *
+     * Use p2p-listen (true) or p2p-find (false)
+     *
+     * Since: 1.36
+     */
+    _nm_setting_property_define_direct_boolean(properties_override,
+                                                obj_properties,
+                                                NM_SETTING_WIFI_P2P_WFD_LISTEN_ONLY,
+                                                PROP_WFD_LISTEN_ONLY,
+                                                FALSE,
+                                                NM_SETTING_PARAM_NONE,
+                                                NMSettingWifiP2P,
+                                                _priv.wfd_listen_only);
+
+                                                /**
+     * NMSettingWifiP2P:wfd-listen-period:
+     *
+     * Timeout value used for p2p-listen or p2p-find calls
+     *
+     * Since: 1.36
+     */
+    _nm_setting_property_define_direct_int32(properties_override,
+                                                obj_properties,
+                                                NM_SETTING_WIFI_P2P_WFD_LISTEN_PERIOD,
+                                                PROP_WFD_LISTEN_PERIOD,
+                                                0,
+                                                600,
+                                                30,
+                                                NM_SETTING_PARAM_NONE,
+                                                NMSettingWifiP2P,
+                                                _priv.wfd_listen_period);
+
+                                                /**
+     * NMSettingWifiP2P:wfd-listen-interval:
+     *
+     * Timeout value used for the time between subsequent p2p-listen or p2p-find calls
+     *
+     * Since: 1.36
+     */
+    _nm_setting_property_define_direct_int32(properties_override,
+                                                obj_properties,
+                                                NM_SETTING_WIFI_P2P_WFD_LISTEN_INTERVAL,
+                                                PROP_WFD_LISTEN_INTERVAL,
+                                                0,
+                                                600,
+                                                30,
+                                                NM_SETTING_PARAM_NONE,
+                                                NMSettingWifiP2P,
+                                                _priv.wfd_listen_interval);
     /**
      * NMSettingWifiP2P:wfd-vendor-extensions:
      *

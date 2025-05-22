@@ -73,6 +73,27 @@ G_BEGIN_DECLS
  */
 #define NM_SETTING_WIFI_P2P_WFD_SECURITY "wfd-security"
 
+/**
+ * NM_SETTING_WIFI_P2P_WFD_LISTEN_ONLY:
+ *
+ * Wether we should use p2p-find (false) or p2p-listen (true)
+ */
+#define NM_SETTING_WIFI_P2P_WFD_LISTEN_ONLY "wfd-listen-only"
+
+/**
+ * NM_SETTING_WIFI_P2P_WFD_LISTEN_PERIOD:
+ *
+ * The timeout used when calling p2p-find or p2p-listen
+ */
+#define NM_SETTING_WIFI_P2P_WFD_LISTEN_PERIOD "wfd-listen-period"
+
+/**
+ * NM_SETTING_WIFI_P2P_WFD_LISTEN_INTERVAL:
+ *
+ * The timeout used to make repeated p2p-find or p2p-listen calls after the initial call is made
+ */
+#define NM_SETTING_WIFI_P2P_WFD_LISTEN_INTERVAL "wfd-listen-interval"
+
 
 /**
  * NM_SETTING_WIFI_P2P_MODE_NONE:
@@ -151,6 +172,15 @@ const char *nm_setting_wifi_p2p_get_wfd_host_name(NMSettingWifiP2P *setting);
 
 NM_AVAILABLE_IN_1_36
 const char *nm_setting_wifi_p2p_get_wfd_security(NMSettingWifiP2P *setting);
+
+NM_AVAILABLE_IN_1_36
+gboolean nm_setting_wifi_p2p_get_wfd_listen_only(NMSettingWifiP2P *setting);
+
+NM_AVAILABLE_IN_1_36
+gint nm_setting_wifi_p2p_get_wfd_listen_period(NMSettingWifiP2P *setting);
+
+NM_AVAILABLE_IN_1_36
+gint nm_setting_wifi_p2p_get_wfd_listen_interval(NMSettingWifiP2P *setting);
 
 G_END_DECLS
 

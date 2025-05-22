@@ -1990,14 +1990,7 @@ _p2p_handle_set_device_config_cb(GVariant *res, GError *error, gpointer user_dat
     else
         _LOGW("p2p: set P2PDeviceConfig failed with %s", error->message);
 
-    // BMEEK: subscribe to the PBC & Failure provision discovery signal as well. We should be conditionally subscribing to these signals based on our supported wpa_s config methods
-
-   
-
-    // if(p2p_config_data->pd_pin_req_signal_id != NULL) {
-    //     _LOGD("Clearing existing ProvisionDiscovery dbus subscription!!");
-    //     nm_clear_g_dbus_connection_signal(priv->dbus_connection, &p2p_config_data->pd_pin_req_signal_id);
-    // }
+    // TODO: subscribe to the PBC & Failure provision discovery signal as well. Should we conditionally subscribing to these signals based on our supported wpa_s config methods?
 
     _LOGD("Subscribing to the ProvisionDiscoveryRequest signals");
     
@@ -2024,15 +2017,7 @@ _p2p_call_set_device_config(NMSupplicantInterface *self, P2pConfigData *p2p_conf
     GBytes  *device_category;
     GBytes  *vendor_extensions;
     char *config_type;
-    /*
-    if (wps_method & NM_SETTING_WIRELESS_SECURITY_WPS_METHOD_PBC) {
-        get_secret_flags |= NM_SECRET_AGENT_GET_SECRETS_FLAG_WPS_PBC_ACTIVE;
-        type = "pbc";
-    } else if (wps_method & NM_SETTING_WIRELESS_SECURITY_WPS_METHOD_PIN) {
-        type = "pin";
-    } else
-        type = NULL;
-    */
+
     config_type = g_strdup("push_button");
     if(p2p_config_data->config_methods) {
         if(g_strcmp0(p2p_config_data->config_methods,NM_SETTING_WIFI_P2P_SECURITY_PIN_DISPLAY) == 0 ) {

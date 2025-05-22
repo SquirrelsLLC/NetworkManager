@@ -59,6 +59,9 @@ typedef struct {
     /* Wi-Fi Display Components */
     _NMWifiP2pWfdDeviceMode wfd_device_mode;
     char                   *provisioned_pin;
+    gboolean                listen_only;
+    gint                    listen_period;
+    gint                    listen_interval;
     guint                   broadcast_p2p_timeout_id;
 
     bool is_waiting_for_supplicant : 1;
@@ -380,10 +383,14 @@ supplicant_find_timeout_cb(gpointer user_data)
                                     NM_DEVICE_STATE_REASON_PEER_NOT_FOUND);
         }
     } else {
-        _LOGD(LOGD_P2P, "supplicant_p2p_start_find timeout! Calling again for p2p_start-find(10)");
-        priv->find_peer_timeout_id = g_timeout_add_seconds(10, supplicant_find_timeout_cb, self);
-        nm_supplicant_interface_p2p_start_find(priv->mgmt_iface, 10);
-        /// nm_supplicant_interface_p2p_start_listen(priv->mgmt_iface, 10);
+        nm_supplicant_interface_p2p_stop_find(priv->mgmt_iface);
+
+        priv->find_peer_timeout_id = g_timeout_add_seconds(priv->listen_interval, supplicant_find_timeout_cb, self);
+        if(!priv->listen_only){
+            nm_supplicant_interface_p2p_start_find(priv->mgmt_iface, priv->listen_period);
+        } else {
+            nm_supplicant_interface_p2p_start_listen(priv->mgmt_iface, priv->listen_period);
+        }
     }
     return G_SOURCE_REMOVE;
 }
@@ -396,6 +403,11 @@ act_stage1_prepare(NMDevice *device, NMDeviceStateReason *out_failure_reason)
     NMConnection           *connection;
     NMSettingWifiP2P       *s_wifi_p2p;
     NMWifiP2PPeer          *peer;
+    GBytes                 *wfd_ies;
+    GBytes                 *wfd_vendor_extensions;
+    GBytes                 *wfd_device_category;
+    const char             *wfd_host_name;
+    const char             *wfd_config_method;
     const char             *wfd_mode;
 
     _LOGD(LOGD_P2P, "Act_Stage 1 :: Prepare!");
@@ -422,7 +434,19 @@ act_stage1_prepare(NMDevice *device, NMDeviceStateReason *out_failure_reason)
     }
     _LOGD(LOGD_P2P, "Act_Stage 1 :: Set WFD Mode : %s", wfd_mode);
 
-    priv->provisioned_pin = NULL;
+    wfd_ies = nm_setting_wifi_p2p_get_wfd_ies(s_wifi_p2p);
+    if(wfd_ies) {
+        _LOGD(LOGD_P2P,"Act_Stage 1 ::  P2P Connection settings provided WFD IE's - setting them now");
+        nm_supplicant_manager_set_wfd_ies(priv->sup_mgr, wfd_ies);
+    }
+
+    priv->listen_only = nm_setting_wifi_p2p_get_wfd_listen_only(s_wifi_p2p);
+
+    priv->listen_period = nm_setting_wifi_p2p_get_wfd_listen_period(s_wifi_p2p);
+
+    priv->listen_interval = nm_setting_wifi_p2p_get_wfd_listen_interval(s_wifi_p2p);
+
+    _LOGD(LOGD_P2P,"Act_Stage 1 :: Peer2Peer listen operation: listen-only: %d | listen-period: %i | listen-interval: %i",priv->listen_only,priv->listen_period,priv->listen_interval);
 
     if (priv->wfd_device_mode != _NM_WIFI_P2P_WFD_DEVICE_MODE_SINK) {
         _LOGD(LOGD_P2P,
@@ -432,14 +456,32 @@ act_stage1_prepare(NMDevice *device, NMDeviceStateReason *out_failure_reason)
             /* Set up a timeout on the find attempt and run a find for the same period of time */
             if (priv->find_peer_timeout_id == 0) {
                 priv->find_peer_timeout_id =
-                    g_timeout_add_seconds(10, supplicant_find_timeout_cb, self);
+                    g_timeout_add_seconds(priv->listen_interval, supplicant_find_timeout_cb, self);
 
-                nm_supplicant_interface_p2p_start_find(priv->mgmt_iface, 10);
+                nm_supplicant_interface_p2p_start_find(priv->mgmt_iface, priv->listen_period);
             }
             return NM_ACT_STAGE_RETURN_POSTPONE;
         }
     } else {
-        _LOGD(LOGD_P2P, "Act_Stage 1 :: WFD_SINK - proceeding with SINK connection activation");
+    
+         wfd_vendor_extensions = nm_setting_wifi_p2p_get_vendor_extension_ies(s_wifi_p2p);
+        _LOGD(LOGD_P2P, "Vender Extension Len: %i", g_bytes_get_size(wfd_vendor_extensions));
+        wfd_device_category = nm_setting_wifi_p2p_get_wfd_device_category(s_wifi_p2p);
+        _LOGD(LOGD_P2P, "Device Category Len: %i", g_bytes_get_size(wfd_device_category));
+        wfd_host_name = nm_setting_wifi_p2p_get_wfd_host_name(s_wifi_p2p);
+        _LOGD(LOGD_P2P, "Device Host Name: %s", wfd_host_name);
+        wfd_config_method = nm_setting_wifi_p2p_get_wfd_security(s_wifi_p2p);
+
+
+        _LOGD(LOGD_P2P, "Act_Stage 1 ::  Attempting to set wpa_supplicant P2PDeviceConfig");
+        nm_supplicant_interface_create_p2p_device_config(
+            priv->mgmt_iface,
+            wfd_config_method,
+            wfd_host_name,
+            wfd_device_category,
+            wfd_vendor_extensions,
+            7,   // TODO: export goIntent as a p2p_setting
+            FALSE);  // TODO: export persistentReconnect as a p2p_setting
     }
 
     return NM_ACT_STAGE_RETURN_SUCCESS;
@@ -479,13 +521,13 @@ act_stage2_config(NMDevice *device, NMDeviceStateReason *out_failure_reason)
     NMDeviceWifiP2P        *self = NM_DEVICE_WIFI_P2P(device);
     NMDeviceWifiP2PPrivate *priv = NM_DEVICE_WIFI_P2P_GET_PRIVATE(self);
     NMConnection           *connection;
-    NMSettingWifiP2P       *s_wifi_p2p;
+    // NMSettingWifiP2P       *s_wifi_p2p;
     NMWifiP2PPeer          *peer;
-    GBytes                 *wfd_ies;
-    GBytes                 *wfd_vendor_extensions;
-    GBytes                 *wfd_device_category;
-    char             *wfd_host_name;
-    char             *wfd_config_method;
+    // GBytes                 *wfd_ies;
+    // GBytes                 *wfd_vendor_extensions;
+    // GBytes                 *wfd_device_category;
+    // char                   *wfd_host_name;
+    // char                   *wfd_config_method;
 
     _LOGD(LOGD_P2P, "Act_Stage 2 :: Config!");
 
@@ -506,6 +548,7 @@ act_stage2_config(NMDevice *device, NMDeviceStateReason *out_failure_reason)
 
     // Not that it would really matter, but if this is not a WFD p2p device, we don't need to set any WFD IEs
     if (priv->wfd_device_mode != _NM_WIFI_P2P_WFD_DEVICE_MODE_NONE) {
+#if 0   // Moving this block of code to ACT_STAGE_1
         _LOGD(LOGD_P2P,
               "Act_Stage 2 ::  This is a WFD P2P device, calling supplicant_manager to set global "
               "WFD IEs in wpa_supplicant");
@@ -535,18 +578,26 @@ act_stage2_config(NMDevice *device, NMDeviceStateReason *out_failure_reason)
             wfd_vendor_extensions,
             7,   // TODO: export goIntent as a p2p_setting
             FALSE);  // TODO: export persistentReconnect as a p2p_setting
+#endif
+        _LOGD(LOGD_P2P, "Act_Stage 2 ::  Activating p2p_start_find on management interface");
+        /**
+         * Connections for a WFD_SINK are a little backwards, compared to a WFD_SOURCE or a traditional P2P connection
+         * When acting as a SINK, we wait for peers to initate a connection with us, rather than initiating a connection ourselves
+         * Once a peer attempts a connection with us, and forms a group - we can proceed to ACT_STAGE_3
+         */
 
-        _LOGD(LOGD_P2P, "Act_Stage 2 ::  Activating p2p_start_find(10) on management interface");
-
-        /* Set up a timeout on the find attempt and run a find for the same period of time */
         if (priv->find_peer_timeout_id == 0) {
             priv->find_peer_timeout_id =
-                g_timeout_add_seconds(10, supplicant_find_timeout_cb, self);
+                g_timeout_add_seconds(priv->listen_interval, supplicant_find_timeout_cb, self);
 
-            nm_supplicant_interface_p2p_start_find(priv->mgmt_iface, 10);
-            // nm_supplicant_interface_p2p_start_listen(priv->mgmt_iface, 10);
+            if(!priv->listen_only){
+                nm_supplicant_interface_p2p_start_find(priv->mgmt_iface, priv->listen_period);
+            } else {
+                nm_supplicant_interface_p2p_start_listen(priv->mgmt_iface, priv->listen_period);
+            }
         }
         return NM_ACT_STAGE_RETURN_POSTPONE;
+
     }
 
     // WFD Sink devices will not be concered with connecting to a peer at this time

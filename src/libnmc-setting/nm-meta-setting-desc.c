@@ -8004,6 +8004,15 @@ static const NMMetaPropertyInfo *const property_infos_WIFI_P2P[] = {
     PROPERTY_INFO_WITH_DESC (NM_SETTING_WIFI_P2P_WFD_SECURITY,
         .property_type =                &_pt_gobject_string,
     ),
+    PROPERTY_INFO_WITH_DESC (NM_SETTING_WIFI_P2P_WFD_LISTEN_ONLY,
+        .property_type =                &_pt_gobject_bool,
+    ),
+    PROPERTY_INFO_WITH_DESC (NM_SETTING_WIFI_P2P_WFD_LISTEN_PERIOD,
+        .property_type =                &_pt_gobject_int,
+    ),
+    PROPERTY_INFO_WITH_DESC (NM_SETTING_WIFI_P2P_WFD_LISTEN_INTERVAL,
+        .property_type =                &_pt_gobject_int,
+    ),
     NULL
 };
 
