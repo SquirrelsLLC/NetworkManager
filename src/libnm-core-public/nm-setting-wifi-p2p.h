@@ -55,11 +55,23 @@ G_BEGIN_DECLS
  */
 #define NM_SETTING_WIFI_P2P_WFD_DEVICE_MODE     "wfd-device-mode"
 /**
- * NM_SETTING_WIFI_P2P_WFD_HOST_NAME:
+ * NM_SETTING_WIFI_P2P_WFD_GO_INTENT
+ * 
+ * The value to use (1-14) when negotiating which p2p device in a group should be the GO
+ */
+#define NM_SETTING_WIFI_P2P_WFD_GO_INTENT      "wfd-go-intent"
+/**
+ * NM-SETTING-WIFI-P2P-WFD-PERSISTENT-RECONNECT
+ * 
+ * Whether persistent reconnect should be supported or not when making p2p connections
+ */
+#define NM_SETTING_WIFI_P2P_WFD_PERSISTENT_RECONNECT "wfd-persistent-reconnect"
+/**
+ * NM_SETTING_WIFI_P2P_WFD_DEVICE_NAME:
  *
  * The Wi-Fi Display device name to advertise.
  */
-#define NM_SETTING_WIFI_P2P_WFD_HOST_NAME       "wfd-host-name"
+#define NM_SETTING_WIFI_P2P_WFD_DEVICE_NAME       "wfd-device-name"
 /**
  * NM_SETTING_WIFI_P2P_WFD_DEVICE_CATEGORY:
  *
@@ -168,7 +180,13 @@ NM_AVAILABLE_IN_1_36
 GBytes *nm_setting_wifi_p2p_get_vendor_extension_ies(NMSettingWifiP2P *setting);
 
 NM_AVAILABLE_IN_1_36
-const char *nm_setting_wifi_p2p_get_wfd_host_name(NMSettingWifiP2P *setting);
+gint nm_setting_wifi_p2p_get_wfd_go_intent(NMSettingWifiP2P *setting);
+
+NM_AVAILABLE_IN_1_36
+gboolean nm_setting_wifi_p2p_get_wfd_persistent_reconnect(NMSettingWifiP2P *setting);
+
+NM_AVAILABLE_IN_1_36
+const char *nm_setting_wifi_p2p_get_wfd_device_name(NMSettingWifiP2P *setting);
 
 NM_AVAILABLE_IN_1_36
 const char *nm_setting_wifi_p2p_get_wfd_security(NMSettingWifiP2P *setting);

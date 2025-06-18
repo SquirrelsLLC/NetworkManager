@@ -7995,7 +7995,7 @@ static const NMMetaPropertyInfo *const property_infos_WIFI_P2P[] = {
                                         ),
         ),
     ),
-    PROPERTY_INFO_WITH_DESC (NM_SETTING_WIFI_P2P_WFD_HOST_NAME,
+    PROPERTY_INFO_WITH_DESC (NM_SETTING_WIFI_P2P_WFD_DEVICE_NAME,
         .property_type =                &_pt_gobject_string,
     ),
     PROPERTY_INFO_WITH_DESC (NM_SETTING_WIFI_P2P_WFD_DEVICE_CATEGORY,

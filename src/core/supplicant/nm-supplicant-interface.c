@@ -2077,7 +2077,7 @@ _p2p_call_set_device_config(NMSupplicantInterface *self, P2pConfigData *p2p_conf
 static void
 _p2p_start_device_config(NMSupplicantInterface *self,
     char                  *wps_config_methods,
-    char                  *wfd_host_name,
+    char                  *wfd_device_name,
     GBytes                *wfd_device_category,
     GBytes                *wfd_vendor_extensions,
     guint                  goIntent,
@@ -2085,8 +2085,8 @@ _p2p_start_device_config(NMSupplicantInterface *self,
 {
     NMSupplicantInterfacePrivate *priv = NM_SUPPLICANT_INTERFACE_GET_PRIVATE(self);
     P2pConfigData                *p2p_config_data;
-    const guint8 *device_category_bytes;
-    const guint8 *vendor_extensions_bytes;
+    const guint8                 *device_category_bytes;
+    const guint8                 *vendor_extensions_bytes;
     gsize                         vendor_extension_len;
     gsize                         device_category_len;
 
@@ -2121,7 +2121,7 @@ _p2p_start_device_config(NMSupplicantInterface *self,
 
         p2p_config_data       = g_slice_new(P2pConfigData);
         *p2p_config_data      = (P2pConfigData){.self              = self,
-                                                .host_name         = g_strdup(wfd_host_name),
+                                                .host_name         = g_strdup(wfd_device_name),
                                                 .config_methods    = g_strdup(wps_config_methods),
                                                 // .device_category   = g_bytes_new_take(device_category_data,device_category_len),
                                                 .device_category_data = g_memdup(device_category_bytes,device_category_len),
@@ -2140,7 +2140,7 @@ _p2p_start_device_config(NMSupplicantInterface *self,
         g_free(p2p_config_data->device_category_data);
         g_free(p2p_config_data->vendor_extensions_data);
 
-        p2p_config_data->host_name         = g_strdup(wfd_host_name);
+        p2p_config_data->host_name         = g_strdup(wfd_device_name);
         p2p_config_data->config_methods    = g_strdup(wps_config_methods);
         // p2p_config_data->device_category   = g_bytes_new_take(device_category_data,device_category_len);
         p2p_config_data->device_category_data   = g_memdup(device_category_bytes,device_category_len);
@@ -2159,7 +2159,7 @@ _p2p_start_device_config(NMSupplicantInterface *self,
 void
 nm_supplicant_interface_create_p2p_device_config(NMSupplicantInterface *self,
                                                  char                  *wps_config_methods,
-                                                 char                  *wfd_host_name,
+                                                 char                  *wfd_device_name,
                                                  GBytes                *wfd_device_category,
                                                  GBytes                *wfd_vendor_extensions,
                                                  guint                  goIntent,
@@ -2168,7 +2168,7 @@ nm_supplicant_interface_create_p2p_device_config(NMSupplicantInterface *self,
     _LOGD("Supplicant Interface wants to set wpas p2p-device-confg!");
     _p2p_start_device_config(self,
                              wps_config_methods,
-                             wfd_host_name,
+                             wfd_device_name,
                              wfd_device_category,
                              wfd_vendor_extensions,
                              goIntent,

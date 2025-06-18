@@ -59,6 +59,8 @@ typedef struct {
     /* Wi-Fi Display Components */
     _NMWifiP2pWfdDeviceMode wfd_device_mode;
     char                   *provisioned_pin;
+    gboolean                persistent_reconnect;
+    gint                    go_intent;
     gboolean                listen_only;
     gint                    listen_period;
     gint                    listen_interval;
@@ -173,7 +175,6 @@ check_connection_peer_joined(NMDeviceWifiP2P *device)
     if (!conn || !priv->group_iface)
         return FALSE;
 //TODO: Fix the underlying causes that make this return FALSE for Wi-Fi display connections (namely windows client connections)
-#if 0
     /* Comparing the object path found on the group_iface with the peers
      * found on the mgmt_iface is legal. */
     group = nm_supplicant_interface_get_p2p_group_path(priv->group_iface);
@@ -189,7 +190,7 @@ check_connection_peer_joined(NMDeviceWifiP2P *device)
     groups = nm_wifi_p2p_peer_get_groups(peer);
     if (!groups || !g_strv_contains(groups, group))
         return FALSE;
-#endif
+
     return TRUE;
 }
 
@@ -406,7 +407,7 @@ act_stage1_prepare(NMDevice *device, NMDeviceStateReason *out_failure_reason)
     GBytes                 *wfd_ies;
     GBytes                 *wfd_vendor_extensions;
     GBytes                 *wfd_device_category;
-    const char             *wfd_host_name;
+    const char             *wfd_device_name;
     const char             *wfd_config_method;
     const char             *wfd_mode;
 
@@ -446,7 +447,11 @@ act_stage1_prepare(NMDevice *device, NMDeviceStateReason *out_failure_reason)
 
     priv->listen_interval = nm_setting_wifi_p2p_get_wfd_listen_interval(s_wifi_p2p);
 
-    _LOGD(LOGD_P2P,"Act_Stage 1 :: Peer2Peer listen operation: listen-only: %d | listen-period: %i | listen-interval: %i",priv->listen_only,priv->listen_period,priv->listen_interval);
+    priv->go_intent = nm_setting_wifi_p2p_get_wfd_go_intent(s_wifi_p2p);
+
+    priv->persistent_reconnect = nm_setting_wifi_p2p_get_wfd_persistent_reconnect(s_wifi_p2p);
+
+    // _LOGD(LOGD_P2P,"Act_Stage 1 :: Peer2Peer listen operation: listen-only: %d | listen-period: %i | listen-interval: %i",priv->listen_only,priv->listen_period,priv->listen_interval);
 
     if (priv->wfd_device_mode != _NM_WIFI_P2P_WFD_DEVICE_MODE_SINK) {
         _LOGD(LOGD_P2P,
@@ -465,11 +470,11 @@ act_stage1_prepare(NMDevice *device, NMDeviceStateReason *out_failure_reason)
     } else {
     
          wfd_vendor_extensions = nm_setting_wifi_p2p_get_vendor_extension_ies(s_wifi_p2p);
-        _LOGD(LOGD_P2P, "Vender Extension Len: %i", g_bytes_get_size(wfd_vendor_extensions));
+        // _LOGD(LOGD_P2P, "Vender Extension Len: %i", g_bytes_get_size(wfd_vendor_extensions));
         wfd_device_category = nm_setting_wifi_p2p_get_wfd_device_category(s_wifi_p2p);
-        _LOGD(LOGD_P2P, "Device Category Len: %i", g_bytes_get_size(wfd_device_category));
-        wfd_host_name = nm_setting_wifi_p2p_get_wfd_host_name(s_wifi_p2p);
-        _LOGD(LOGD_P2P, "Device Host Name: %s", wfd_host_name);
+        // _LOGD(LOGD_P2P, "Device Category Len: %i", g_bytes_get_size(wfd_device_category));
+        wfd_device_name = nm_setting_wifi_p2p_get_wfd_device_name(s_wifi_p2p);
+        // _LOGD(LOGD_P2P, "Device Name: %s", wfd_device_name);
         wfd_config_method = nm_setting_wifi_p2p_get_wfd_security(s_wifi_p2p);
 
 
@@ -477,11 +482,11 @@ act_stage1_prepare(NMDevice *device, NMDeviceStateReason *out_failure_reason)
         nm_supplicant_interface_create_p2p_device_config(
             priv->mgmt_iface,
             wfd_config_method,
-            wfd_host_name,
+            wfd_device_name,
             wfd_device_category,
             wfd_vendor_extensions,
-            7,   // TODO: export goIntent as a p2p_setting
-            FALSE);  // TODO: export persistentReconnect as a p2p_setting
+            priv->go_intent,   // TODO: export goIntent as a p2p_setting
+            priv->persistent_reconnect);  // TODO: export persistentReconnect as a p2p_setting
     }
 
     return NM_ACT_STAGE_RETURN_SUCCESS;
@@ -526,7 +531,7 @@ act_stage2_config(NMDevice *device, NMDeviceStateReason *out_failure_reason)
     // GBytes                 *wfd_ies;
     // GBytes                 *wfd_vendor_extensions;
     // GBytes                 *wfd_device_category;
-    // char                   *wfd_host_name;
+    // char                   *wfd_device_name;
     // char                   *wfd_config_method;
 
     _LOGD(LOGD_P2P, "Act_Stage 2 :: Config!");
@@ -564,8 +569,8 @@ act_stage2_config(NMDevice *device, NMDeviceStateReason *out_failure_reason)
         _LOGD(LOGD_P2P, "Vender Extension Len: %i", g_bytes_get_size(wfd_vendor_extensions));
         wfd_device_category = nm_setting_wifi_p2p_get_wfd_device_category(s_wifi_p2p);
         _LOGD(LOGD_P2P, "Device Category Len: %i", g_bytes_get_size(wfd_device_category));
-        wfd_host_name = nm_setting_wifi_p2p_get_wfd_host_name(s_wifi_p2p);
-        _LOGD(LOGD_P2P, "Device Host Name: %s", wfd_host_name);
+        wfd_device_name = nm_setting_wifi_p2p_get_wfd_device_name(s_wifi_p2p);
+        _LOGD(LOGD_P2P, "Device Name: %s", wfd_device_name);
         wfd_config_method = nm_setting_wifi_p2p_get_wfd_security(s_wifi_p2p);
 
 
@@ -573,7 +578,7 @@ act_stage2_config(NMDevice *device, NMDeviceStateReason *out_failure_reason)
         nm_supplicant_interface_create_p2p_device_config(
             priv->mgmt_iface,
             wfd_config_method,
-            wfd_host_name,
+            wfd_device_name,
             wfd_device_category,
             wfd_vendor_extensions,
             7,   // TODO: export goIntent as a p2p_setting
@@ -1147,15 +1152,29 @@ supplicant_iface_go_neg_request_cb(NMSupplicantInterface *iface,
             _LOGD(LOGD_P2P, "Unable to fetch applied connection!!!");
             p2p_security = NM_SETTING_WIFI_P2P_SECURITY_PUSH_BUTTON;
         }
+        _LOGD(LOGD_DEVICE | LOGD_P2P, "Attempting to connect with peer. Method: %s",p2p_security);
+        nm_supplicant_interface_p2p_connect(priv->mgmt_iface, peer_path, p2p_security, (priv->provisioned_pin) ? priv->provisioned_pin : NULL );
+    
+        /* Set up a timeout on the connect attempt */
+        if (priv->sup_timeout_id == 0) {
+            priv->sup_timeout_id = g_timeout_add_seconds(60, supplicant_connection_timeout_cb, self);
+        }
     }
 
-    _LOGD(LOGD_DEVICE | LOGD_P2P, "Attempting to connect with peer. Method: %s",p2p_security);
-    nm_supplicant_interface_p2p_connect(priv->mgmt_iface, peer_path, p2p_security, (priv->provisioned_pin) ? priv->provisioned_pin : NULL );
+}
 
-    /* Set up a timeout on the connect attempt */
-    if (priv->sup_timeout_id == 0) {
-        priv->sup_timeout_id = g_timeout_add_seconds(60, supplicant_connection_timeout_cb, self);
-    }
+static void
+supplicant_iface_group_invitation_received_cb(NMSupplicantInterface *face, char *go_address, void *user_data)
+{
+    NMDeviceWifiP2P           *self = NM_DEVICE_WIFI_P2P(user_data);
+    NMDeviceWifiP2PPrivate    *priv;
+
+    g_return_if_fail(self);
+
+    priv = NM_DEVICE_WIFI_P2P_GET_PRIVATE(self);
+
+    _LOGD(LOGD_P2P, "P2P Group Invitation sent for GO: %s", go_address);
+
 }
 
 static void
@@ -1452,6 +1471,10 @@ nm_device_wifi_p2p_set_mgmt_iface(NMDeviceWifiP2P *self, NMSupplicantInterface *
                      NM_SUPPLICANT_INTERFACE_GO_NEG_REQEUST,
                      G_CALLBACK(supplicant_iface_go_neg_request_cb),
                      self);
+    g_signal_connect(priv->mgmt_iface,
+                    NM_SUPPLICANT_INTERFACE_GROUP_INVITATION,
+                    G_CALLBACK(supplicant_iface_group_invitation_received_cb),
+                    self);
 done:
     nm_device_queue_recheck_available(NM_DEVICE(self),
                                       NM_DEVICE_STATE_REASON_SUPPLICANT_AVAILABLE,
