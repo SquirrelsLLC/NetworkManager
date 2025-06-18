@@ -85,6 +85,7 @@ enum {
     WPS_CREDENTIALS, /* WPS credentials received */
     GROUP_STARTED,   /* a new Group (interface) was created */
     GROUP_FINISHED,  /* a Group (interface) has been finished */
+    GROUP_INVITED,
     PD_REQ,          /* a peer wants to qualify our discovery - promt for PIN if necessary */
     GO_NEG_REQ,      /* A peer asked us to form a group with them. Wow */
     GO_NEG_FAIL,     /* A GO Negotiation has failed */
@@ -3447,7 +3448,7 @@ _signal_handle(NMSupplicantInterface *self,
         if (!priv->is_ready_p2p_device)
             return;
 
-        _LOGD("Received P2P Signal: %s", signal_name);
+        // _LOGD("Received P2P Signal: %s", signal_name);
 
         if (nm_streq(signal_name, "DeviceFound")) {
             if (g_variant_is_of_type(parameters, G_VARIANT_TYPE("(o)"))) {
@@ -3579,8 +3580,35 @@ _signal_handle(NMSupplicantInterface *self,
         }
 
         if(nm_streq(signal_name, "InvitationReceived")) {
-            if (g_variant_is_of_type(parameters, G_VARIANT_TYPE("(a{sv})"))){
+            gs_unref_variant GVariant             *args  = NULL;
+            GVariant                              *v_v = NULL;
+
             //TODO: Handle P2P Invitation Requets
+            if (g_variant_is_of_type(parameters, G_VARIANT_TYPE("(a{sv})"))){
+                
+                g_variant_get(parameters, "(@a{sv})", &args);
+                
+                v_v = g_variant_lookup_value(args, "go_dev_addr", G_VARIANT_TYPE_BYTESTRING);
+                if(v_v){
+                    const guint8 *addr_data;
+                    gsize         addr_len  = 0;
+                    const char   *dev_addr;
+                    
+
+                    addr_data = g_variant_get_fixed_array(v_v, &addr_len, 1);
+                   
+                    if(addr_len > 0){
+
+                        dev_addr = nm_utils_hwaddr_ntoa(addr_data, addr_len);
+
+                        _LOGD("P2P INVITATION :: go_dev_addr : %s", dev_addr);
+                        g_signal_emit(self, signals[GROUP_INVITED], 0, dev_addr);
+                        
+                    } else {
+                        _LOGD("P2P INVITATION :: invalid go_dev_addr len : %i", addr_len);
+                    }
+
+                }            
             }
         }
 
@@ -4136,6 +4164,17 @@ nm_supplicant_interface_class_init(NMSupplicantInterfaceClass *klass)
                                           NM_TYPE_SUPPLICANT_INTERFACE);
 
     signals[GROUP_FINISHED] = g_signal_new(NM_SUPPLICANT_INTERFACE_GROUP_FINISHED,
+                                           G_OBJECT_CLASS_TYPE(object_class),
+                                           G_SIGNAL_RUN_LAST,
+                                           0,
+                                           NULL,
+                                           NULL,
+                                           NULL,
+                                           G_TYPE_NONE,
+                                           1,
+                                           G_TYPE_STRING);
+
+    signals[GROUP_INVITED] = g_signal_new(NM_SUPPLICANT_INTERFACE_GROUP_INVITATION,
                                            G_OBJECT_CLASS_TYPE(object_class),
                                            G_SIGNAL_RUN_LAST,
                                            0,
