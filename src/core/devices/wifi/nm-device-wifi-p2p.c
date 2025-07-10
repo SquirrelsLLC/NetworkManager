@@ -168,28 +168,43 @@ check_connection_peer_joined(NMDeviceWifiP2P *device)
 {
     NMDeviceWifiP2PPrivate *priv = NM_DEVICE_WIFI_P2P_GET_PRIVATE(device);
     NMConnection           *conn = nm_device_get_applied_connection(NM_DEVICE(device));
+    NMDeviceWifiP2P        *self   = NM_DEVICE_WIFI_P2P(device);    // For logging
     NMWifiP2PPeer          *peer;
     const char             *group;
     const char *const      *groups;
 
-    if (!conn || !priv->group_iface)
+    if (!conn || !priv->group_iface) {
+        if(!conn)
+            _LOGW(LOGD_P2P, "Connection Check - connection missing!");
+        if(!priv->group_iface)
+            _LOGW(LOGD_P2P, "Connection Check - group interface missing!");
         return FALSE;
+    }
 //TODO: Fix the underlying causes that make this return FALSE for Wi-Fi display connections (namely windows client connections)
     /* Comparing the object path found on the group_iface with the peers
      * found on the mgmt_iface is legal. */
     group = nm_supplicant_interface_get_p2p_group_path(priv->group_iface);
-    if (!group)
+    if (!group) {
+        _LOGW(LOGD_P2P, "Connection Check - group object missing!");
         return FALSE;
+    }
 
     peer = nm_wifi_p2p_peers_find_first_compatible(&priv->peers_lst_head, conn, FALSE);
 
     /* NOTE: We currently only support connections to a specific peer */
-    if (!peer)
+    if (!peer) {
+        _LOGW(LOGD_P2P, "Connection Check - peer object missing!");
         return FALSE;
+    }
 
     groups = nm_wifi_p2p_peer_get_groups(peer);
-    if (!groups || !g_strv_contains(groups, group))
-        return FALSE;
+    if (!groups || !g_strv_contains(groups, group)) {
+        if(!groups)
+            _LOGW(LOGD_P2P, "Connection Check - groups missing!");
+        if(!g_strv_contains(groups, group))
+            _LOGW(LOGD_P2P, "Connection Check - group is not part of groups!");
+        // return FALSE;
+    }
 
     return TRUE;
 }
@@ -913,6 +928,8 @@ supplicant_iface_peer_changed_cb(NMSupplicantInterface *iface,
     NMDeviceWifiP2PPrivate *priv = NM_DEVICE_WIFI_P2P_GET_PRIVATE(self);
     NMWifiP2PPeer          *found_peer;
 
+    _LOGD(LOGD_WIFI, "supplicant interface peer info changed!");
+
     found_peer =
         nm_wifi_p2p_peers_find_by_supplicant_path(&priv->peers_lst_head, peer_info->peer_path->str);
 
@@ -1019,6 +1036,8 @@ supplicant_group_iface_group_finished_cb(NMSupplicantInterface *iface,
 {
     NMDeviceWifiP2P *self = NM_DEVICE_WIFI_P2P(user_data);
 
+    _LOGD(LOGD_DEVICE, "Supplicant iFace Group Finished Callback");
+
     supplicant_group_interface_release(self);
 
     nm_device_state_changed(NM_DEVICE(self),
@@ -1032,6 +1051,8 @@ supplicant_iface_group_joined_updated_cb(NMSupplicantInterface *iface,
                                          void                  *user_data)
 {
     NMDeviceWifiP2P *self = NM_DEVICE_WIFI_P2P(user_data);
+
+    _LOGD(LOGD_DEVICE, "Supplicant iFace Group Joined Callback");
 
     check_group_iface_ready(self);
 }

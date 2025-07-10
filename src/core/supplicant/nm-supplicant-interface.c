@@ -49,7 +49,6 @@ typedef struct {
     gboolean               persistent_reconnect;
 
     /* Provision Discovery Singal*/
-    guint         pd_pin_req_signal_id;
     GCancellable *cancellable;
     bool          needs_cancelling : 1;
     bool          is_cancelling : 1;
@@ -158,6 +157,7 @@ typedef struct _NMSupplicantInterfacePrivate {
     guint bss_properties_changed_id;
     guint peer_properties_changed_id;
     guint p2p_group_properties_changed_id;
+    guint p2p_provision_discovery_id;
 
     int ifindex;
 
@@ -1928,7 +1928,7 @@ _p2p_handle_set__config_methods_cb(GVariant *res, GError *error, gpointer user_d
     self            = p2p_config_data->self;
     priv            = NM_SUPPLICANT_INTERFACE_GET_PRIVATE(self);
 
-    _LOGD("Handle p2p_set__config_methods_cb callback!");
+    _LOGD("Handle p2p_set_config_methods_cb callback!");
 }
 
 static void
@@ -1960,19 +1960,24 @@ _p2p_handle_set_device_config_cb(GVariant *res, GError *error, gpointer user_dat
 
     // TODO: subscribe to the PBC & Failure provision discovery signal as well. Should we conditionally subscribing to these signals based on our supported wpa_s config methods?
 
-    _LOGD("Subscribing to the ProvisionDiscoveryRequest signals");
     
-    p2p_config_data->pd_pin_req_signal_id =
-        g_dbus_connection_signal_subscribe(priv->dbus_connection,
-                                           priv->name_owner->str,
-                                           NM_WPAS_DBUS_IFACE_INTERFACE_P2P_DEVICE,
-                                           "ProvisionDiscoveryRequestDisplayPin",
-                                           priv->object_path->str,
-                                           NULL,
-                                           G_DBUS_SIGNAL_FLAGS_NONE,
-                                           _p2p_provision_discovery_cb,
-                                           self,
-                                           NULL);
+    if(!priv->p2p_provision_discovery_id) {
+        _LOGD("Subscribing to the ProvisionDiscoveryRequest signals");
+        priv->p2p_provision_discovery_id =
+            g_dbus_connection_signal_subscribe(priv->dbus_connection,
+                                               priv->name_owner->str,
+                                               NM_WPAS_DBUS_IFACE_INTERFACE_P2P_DEVICE,
+                                               "ProvisionDiscoveryRequestDisplayPin",
+                                               priv->object_path->str,
+                                               NULL,
+                                               G_DBUS_SIGNAL_FLAGS_NONE,
+                                               _p2p_provision_discovery_cb,
+                                               self,
+                                               NULL);
+        
+    } else {
+        _LOGD("ProvisionDiscovery signal already subscribed to!");
+    }
 }
 
 static void
@@ -3109,8 +3114,11 @@ nm_supplicant_interface_p2p_clear_config(NMSupplicantInterface *self)
 
 
     if(priv->p2p_config_data != NULL || !priv->dbus_connection != NULL) {
-        _LOGD("Clearing ProvisionDiscovery Signal Subscription");
-        nm_clear_g_dbus_connection_signal(priv->dbus_connection, &priv->p2p_config_data->pd_pin_req_signal_id);
+        if( nm_clear_g_dbus_connection_signal(priv->dbus_connection, &priv->p2p_provision_discovery_id) ) {
+            _LOGD("Cleared ProvisionDiscovery signal subscription");
+        } else {
+            _LOGD("Failed to clear ProvisionDiscovery signal subscription!");
+        }
     }
 
 }
@@ -3428,6 +3436,8 @@ _signal_handle(NMSupplicantInterface *self,
                 if (!g_variant_lookup(args, "role", "&s", &group_role)) {
                     return;
                 }
+
+                _LOGD("GroupStarted :: Parameters: %s", g_variant_print(parameters, true));
 
                 v_v = g_variant_lookup_value(args, "IpAddr", G_VARIANT_TYPE_BYTESTRING);
                 if (v_v) {
