@@ -27,6 +27,7 @@ G_BEGIN_DECLS
 
 #define NM_DEVICE_WIFI_P2P_HW_ADDRESS "hw-address"
 #define NM_DEVICE_WIFI_P2P_PEERS      "peers"
+#define NM_DEVICE_WIFI_P2P_GROUP      "group"
 #define NM_DEVICE_WIFI_P2P_WFDIES     "wfdies"
 #define NM_DEVICE_WIFI_P2P_PIN        "pin"
 

@@ -18,12 +18,14 @@
 
 /*****************************************************************************/
 
-NM_GOBJECT_PROPERTIES_DEFINE_BASE(PROP_PEERS, PROP_PIN, );
+NM_GOBJECT_PROPERTIES_DEFINE_BASE(PROP_PEERS, PROP_GROUP, PROP_PIN, );
 
 enum {
     PEER_ADDED,
     PEER_REMOVED,
     PIN_CHANGED,
+    GROUP_ADDED,
+    GROUP_REMOVED,
 
     LAST_SIGNAL
 };
@@ -32,6 +34,7 @@ static guint signals[LAST_SIGNAL] = {0};
 
 typedef struct {
     NMLDBusPropertyAO peers;
+    char             *group;
     char             *pin;
 } NMDeviceWifiP2PPrivate;
 
@@ -133,7 +136,7 @@ nm_device_wifi_p2p_get_peer_by_path(NMDeviceWifiP2P *device, const char *path)
  * nm_device_wifi_p2p_get_pin:
  * @device: a #NMDeviceWifiP2P
  *
- * Gets the latest PIN that has been provisied for p2p connection security
+ * Gets the latest PIN that has been provisioned for P2P connection security.
  *
  * Returns: (transfer none): the PIN or %NULL if none is found.
  *
@@ -145,6 +148,14 @@ nm_device_wifi_p2p_get_pin(NMDeviceWifiP2P *device)
     g_return_val_if_fail(NM_IS_DEVICE_WIFI_P2P(device), NULL);
 
     return _nml_coerce_property_str_not_empty(NM_DEVICE_WIFI_P2P_GET_PRIVATE(device)->pin);
+}
+
+static const char *
+_nm_device_wifi_p2p_get_group(NMDeviceWifiP2P *device)
+{
+    g_return_val_if_fail(NM_IS_DEVICE_WIFI_P2P(device), NULL);
+
+    return _nml_coerce_property_str_not_empty(NM_DEVICE_WIFI_P2P_GET_PRIVATE(device)->group);
 }
 
 /**
@@ -321,6 +332,87 @@ _property_ao_notify_changed_peers_cb(NMLDBusPropertyAO *pr_ao,
 
 /*****************************************************************************/
 
+static NMLDBusNotifyUpdatePropFlags
+_notify_update_prop_group(NMClient               *client,
+                          NMLDBusObject          *dbobj,
+                          const NMLDBusMetaIface *meta_iface,
+                          guint                   dbus_property_idx,
+                          GVariant               *value)
+{
+    NMDeviceWifiP2P        *self = NM_DEVICE_WIFI_P2P(dbobj->nmobj);
+    NMDeviceWifiP2PPrivate *priv = NM_DEVICE_WIFI_P2P_GET_PRIVATE(self);
+    const char             *new_group;
+    gs_free char           *old_group = NULL;
+    (void) client;
+    (void) meta_iface;
+    (void) dbus_property_idx;
+
+    new_group = value ? nm_dbus_path_not_empty(g_variant_get_string(value, NULL)) : NULL;
+
+    NML_NMCLIENT_LOG_D(client,
+                       "[%s] group update: old=%s new=%s",
+                       _nm_object_get_path(self),
+                       priv->group ?: "/",
+                       new_group ?: "/");
+
+    if (nm_streq0(priv->group, new_group))
+        return NML_DBUS_NOTIFY_UPDATE_PROP_FLAGS_NONE;
+
+    old_group   = g_steal_pointer(&priv->group);
+    priv->group = g_strdup(new_group);
+
+    if (old_group)
+        g_signal_emit(self, signals[GROUP_REMOVED], 0, old_group);
+    if (priv->group)
+        g_signal_emit(self, signals[GROUP_ADDED], 0, priv->group);
+
+    NML_NMCLIENT_LOG_D(client, "[%s] group signals emitted", _nm_object_get_path(self));
+
+    return NML_DBUS_NOTIFY_UPDATE_PROP_FLAGS_NOTIFY;
+}
+
+/*****************************************************************************/
+
+static NMLDBusNotifyUpdatePropFlags
+_notify_update_prop_pin(NMClient               *client,
+                        NMLDBusObject          *dbobj,
+                        const NMLDBusMetaIface *meta_iface,
+                        guint                   dbus_property_idx,
+                        GVariant               *value)
+{
+    NMDeviceWifiP2P        *self = NM_DEVICE_WIFI_P2P(dbobj->nmobj);
+    NMDeviceWifiP2PPrivate *priv = NM_DEVICE_WIFI_P2P_GET_PRIVATE(self);
+    const char             *new_pin;
+    (void) client;
+    (void) meta_iface;
+    (void) dbus_property_idx;
+
+    new_pin = value ? _nml_coerce_property_str_not_empty(g_variant_get_string(value, NULL)) : NULL;
+
+    NML_NMCLIENT_LOG_D(client,
+                       "[%s] pin update: old=%s new=%s",
+                       _nm_object_get_path(self),
+                       priv->pin ? "<set>" : "<unset>",
+                       new_pin ? "<set>" : "<unset>");
+
+    if (nm_streq0(priv->pin, new_pin))
+        return NML_DBUS_NOTIFY_UPDATE_PROP_FLAGS_NONE;
+
+    nm_strdup_reset(&priv->pin, new_pin);
+
+    if (priv->pin)
+        g_signal_emit(self, signals[PIN_CHANGED], 0, priv->pin);
+
+    NML_NMCLIENT_LOG_D(client,
+                       "[%s] pin signal emitted=%s",
+                       _nm_object_get_path(self),
+                       priv->pin ? "yes" : "no");
+
+    return NML_DBUS_NOTIFY_UPDATE_PROP_FLAGS_NOTIFY;
+}
+
+/*****************************************************************************/
+
 static void
 get_property(GObject *object, guint prop_id, GValue *value, GParamSpec *pspec)
 {
@@ -329,6 +421,9 @@ get_property(GObject *object, guint prop_id, GValue *value, GParamSpec *pspec)
     switch (prop_id) {
     case PROP_PEERS:
         g_value_take_boxed(value, _nm_utils_copy_object_array(nm_device_wifi_p2p_get_peers(self)));
+        break;
+    case PROP_GROUP:
+        g_value_set_string(value, _nm_device_wifi_p2p_get_group(self));
         break;
     case PROP_PIN:
         g_value_set_string(value, nm_device_wifi_p2p_get_pin(self));
@@ -345,11 +440,25 @@ static void
 nm_device_wifi_p2p_init(NMDeviceWifiP2P *device)
 {}
 
+static void
+finalize(GObject *object)
+{
+    NMDeviceWifiP2PPrivate *priv = NM_DEVICE_WIFI_P2P_GET_PRIVATE(object);
+
+    g_free(priv->group);
+    g_free(priv->pin);
+    G_OBJECT_CLASS(nm_device_wifi_p2p_parent_class)->finalize(object);
+}
+
 const NMLDBusMetaIface _nml_dbus_meta_iface_nm_device_wifip2p = NML_DBUS_META_IFACE_INIT_PROP(
     NM_DBUS_INTERFACE_DEVICE_WIFI_P2P,
     nm_device_wifi_p2p_get_type,
     NML_DBUS_META_INTERFACE_PRIO_INSTANTIATE_30,
     NML_DBUS_META_IFACE_DBUS_PROPERTIES(
+        NML_DBUS_META_PROPERTY_INIT_FCN("Group",
+                                        PROP_GROUP,
+                                        "o",
+                                        _notify_update_prop_group),
         NML_DBUS_META_PROPERTY_INIT_FCN("HwAddress",
                                         0,
                                         "s",
@@ -361,7 +470,10 @@ const NMLDBusMetaIface _nml_dbus_meta_iface_nm_device_wifip2p = NML_DBUS_META_IF
                                             nm_wifi_p2p_peer_get_type,
                                             .notify_changed_ao =
                                                 _property_ao_notify_changed_peers_cb),
-        NML_DBUS_META_PROPERTY_INIT_S("Pin", PROP_PIN, NMDeviceWifiP2P, _priv.pin), ), );
+        NML_DBUS_META_PROPERTY_INIT_FCN("Pin",
+                                        PROP_PIN,
+                                        "s",
+                                        _notify_update_prop_pin), ), );
 
 static void
 nm_device_wifi_p2p_class_init(NMDeviceWifiP2PClass *klass)
@@ -371,6 +483,7 @@ nm_device_wifi_p2p_class_init(NMDeviceWifiP2PClass *klass)
     NMDeviceClass *device_class    = NM_DEVICE_CLASS(klass);
 
     object_class->get_property = get_property;
+    object_class->finalize     = finalize;
 
     _NM_OBJECT_CLASS_INIT_PRIV_PTR_DIRECT(nm_object_class, NMDeviceWifiP2P);
 
@@ -393,10 +506,13 @@ nm_device_wifi_p2p_class_init(NMDeviceWifiP2PClass *klass)
                                                     G_TYPE_PTR_ARRAY,
                                                     G_PARAM_READABLE | G_PARAM_STATIC_STRINGS);
 
+    obj_properties[PROP_GROUP] =
+        g_param_spec_string(NM_DEVICE_WIFI_P2P_GROUP, "", "", NULL, G_PARAM_READABLE);
+
     /**
-     * NMDeviceWifiP2P:pin: (type GPtrArray(NMWifiP2PPeer))
+     * NMDeviceWifiP2P:pin:
      *
-     * The most recently provisioned PIN for p2p connection security
+     * The most recently provisioned PIN for P2P connection security.
      *
      * Since: 1.36
      **/
@@ -451,7 +567,7 @@ nm_device_wifi_p2p_class_init(NMDeviceWifiP2PClass *klass)
      * @device: the Wi-Fi P2P device that received the signal
      * @pin: the generated pin code
      *
-     * Notifies that a new PIN code has been generated for PIN secutirity
+     * Notifies that the PIN property changed to a new generated PIN.
      *
      * Since: 1.36
      **/
@@ -465,4 +581,26 @@ nm_device_wifi_p2p_class_init(NMDeviceWifiP2PClass *klass)
                                             G_TYPE_NONE,
                                             1,
                                             G_TYPE_STRING);
+
+    signals[GROUP_ADDED] = g_signal_new("group-added",
+                                        G_OBJECT_CLASS_TYPE(object_class),
+                                        G_SIGNAL_RUN_FIRST,
+                                        0,
+                                        NULL,
+                                        NULL,
+                                        g_cclosure_marshal_VOID__STRING,
+                                        G_TYPE_NONE,
+                                        1,
+                                        G_TYPE_STRING);
+
+    signals[GROUP_REMOVED] = g_signal_new("group-removed",
+                                        G_OBJECT_CLASS_TYPE(object_class),
+                                        G_SIGNAL_RUN_FIRST,
+                                        0,
+                                        NULL,
+                                        NULL,
+                                        g_cclosure_marshal_VOID__STRING,
+                                        G_TYPE_NONE,
+                                        1,
+                                        G_TYPE_STRING);
 }
