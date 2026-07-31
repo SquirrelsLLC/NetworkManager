@@ -382,11 +382,11 @@ verify(NMSetting *setting, NMConnection *connection, GError **error)
 
     // General setting verification that should apply to ALL p2p devices
 
-    if (priv->wfd_go_intent <= 0 || priv->wfd_go_intent > 14) {
+    if (priv->wfd_go_intent < 0 || priv->wfd_go_intent > 15) {
         g_set_error(error,
                     NM_CONNECTION_ERROR,
                     NM_CONNECTION_ERROR_INVALID_PROPERTY,
-                    _("'%i' is not a valid GO intent. Value must be between 1-14 (inclusive)"),
+                    _("'%i' is not a valid GO intent. Value must be between 0-15 (inclusive)"),
                     priv->wfd_go_intent);
         g_prefix_error(error,
                        "%s.%s: ",
@@ -540,7 +540,7 @@ nm_setting_wifi_p2p_class_init(NMSettingWifiP2PClass *setting_wifi_p2p_class)
     /**
      * NMSettingWifiP2P:wfd-go-intent:
      *
-     * The value to use (1-14) when negotiating which p2p device in a group should be the GO
+     * The value to use (0-15) when negotiating which p2p device in a group should be the GO
      *
      * Since: 1.36
      */
@@ -548,8 +548,8 @@ nm_setting_wifi_p2p_class_init(NMSettingWifiP2PClass *setting_wifi_p2p_class)
                                              obj_properties,
                                              NM_SETTING_WIFI_P2P_WFD_GO_INTENT,
                                              PROP_WFD_GO_INTENT,
-                                             1,
-                                             14,
+                                             0,
+                                             15,
                                              7,
                                              NM_SETTING_PARAM_FUZZY_IGNORE,
                                              NMSettingWifiP2P,

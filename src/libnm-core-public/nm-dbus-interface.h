@@ -628,6 +628,7 @@ typedef enum {
  * @NM_DEVICE_STATE_REASON_SRIOV_CONFIGURATION_FAILED: configuration of SR-IOV parameters failed
  * @NM_DEVICE_STATE_REASON_PEER_NOT_FOUND: The Wi-Fi P2P peer could not be found
  * @NM_DEVICE_STATE_REASON_DEVICE_HANDLER_FAILED: The device handler dispatcher returned an
+ * @NM_DEVICE_STATE_REASON_GROUP_FORMATION_FAILED: The requested P2P connection failed at Group Formation
  *   error. Since: 1.46
  *
  * Device state change reason codes
@@ -702,6 +703,7 @@ typedef enum {
     NM_DEVICE_STATE_REASON_SRIOV_CONFIGURATION_FAILED     = 66,
     NM_DEVICE_STATE_REASON_PEER_NOT_FOUND                 = 67,
     NM_DEVICE_STATE_REASON_DEVICE_HANDLER_FAILED          = 68,
+    NM_DEVICE_STATE_REASON_GROUP_FORMATION_FAILED         = 69,
 } NMDeviceStateReason;
 
 /**

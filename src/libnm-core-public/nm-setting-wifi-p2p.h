@@ -57,7 +57,7 @@ G_BEGIN_DECLS
 /**
  * NM_SETTING_WIFI_P2P_WFD_GO_INTENT
  * 
- * The value to use (1-14) when negotiating which p2p device in a group should be the GO
+ * The value to use (0-15) when negotiating which p2p device in a group should be the GO
  */
 #define NM_SETTING_WIFI_P2P_WFD_GO_INTENT      "wfd-go-intent"
 /**
