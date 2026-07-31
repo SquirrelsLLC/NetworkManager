@@ -88,6 +88,8 @@ enum {
     PD_REQ,          /* a peer wants to qualify our discovery - promt for PIN if necessary */
     GO_NEG_REQ,      /* A peer asked us to form a group with them. Wow */
     GO_NEG_FAIL,     /* A GO Negotiation has failed */
+    P2P_WPS_FAIL,
+    P2P_GROUP_FORMATION_FAIL,
     LAST_SIGNAL
 };
 
@@ -118,6 +120,9 @@ typedef struct _NMSupplicantInterfacePrivate {
     GCancellable *main_cancellable;
 
     NMRefString *p2p_group_path;
+    NMRefString *go_neg_peer_path;
+    NMRefString *go_neg_group_path;
+    bool         go_neg_is_go : 1;
 
     GCancellable *p2p_group_properties_cancellable;
 
@@ -159,6 +164,9 @@ typedef struct _NMSupplicantInterfacePrivate {
     guint peer_properties_changed_id;
     guint p2p_group_properties_changed_id;
     guint p2p_provision_discovery_id;
+    guint p2p_provision_failure_id;
+    guint p2p_wps_failure_id;
+    guint p2p_group_formation_failure_id;
 
     int ifindex;
 
@@ -253,6 +261,11 @@ _log_pretty_object_path(NMSupplicantInterfacePrivate *priv)
 static void _starting_check_ready(NMSupplicantInterface *self);
 
 static void assoc_return(NMSupplicantInterface *self, GError *error, const char *message);
+static void _p2p_go_negotiation_clear(NMSupplicantInterface *self);
+static void _p2p_go_negotiation_set_peer(NMSupplicantInterface *self, const char *peer_path);
+static gboolean _peer_info_add_group(NMSupplicantPeerInfo *peer_info, const char *group_path);
+static gboolean _p2p_go_negotiation_apply_group(NMSupplicantInterface *self,
+                                                NMSupplicantPeerInfo  *peer_info);
 
 /*****************************************************************************/
 
@@ -937,6 +950,83 @@ _peer_info_changed_emit(NMSupplicantInterface *self,
 }
 
 static void
+_p2p_go_negotiation_clear(NMSupplicantInterface *self)
+{
+    NMSupplicantInterfacePrivate *priv = NM_SUPPLICANT_INTERFACE_GET_PRIVATE(self);
+
+    nm_clear_pointer(&priv->go_neg_peer_path, nm_ref_string_unref);
+    nm_clear_pointer(&priv->go_neg_group_path, nm_ref_string_unref);
+    priv->go_neg_is_go = FALSE;
+}
+
+static void
+_p2p_go_negotiation_set_peer(NMSupplicantInterface *self, const char *peer_path)
+{
+    NMSupplicantInterfacePrivate   *priv      = NM_SUPPLICANT_INTERFACE_GET_PRIVATE(self);
+    nm_auto_ref_string NMRefString *new_path  = NULL;
+
+    new_path = nm_ref_string_new(nm_dbus_path_not_empty(peer_path));
+    if (priv->go_neg_peer_path == new_path)
+        return;
+
+    nm_clear_pointer(&priv->go_neg_peer_path, nm_ref_string_unref);
+    nm_clear_pointer(&priv->go_neg_group_path, nm_ref_string_unref);
+
+    priv->go_neg_peer_path = g_steal_pointer(&new_path);
+    priv->go_neg_is_go     = FALSE;
+}
+
+static gboolean
+_peer_info_add_group(NMSupplicantPeerInfo *peer_info, const char *group_path)
+{
+    const char *const *groups;
+    gsize              n = 0;
+    char             **new_groups;
+    gsize              i;
+
+    g_return_val_if_fail(peer_info, FALSE);
+    g_return_val_if_fail(group_path, FALSE);
+
+    if (peer_info->groups && g_strv_contains(peer_info->groups, group_path))
+        return FALSE;
+
+    groups = peer_info->groups;
+    if (groups) {
+        for (n = 0; groups[n]; n++)
+            ;
+    }
+
+    new_groups = g_new0(char *, n + 2);
+    for (i = 0; i < n; i++)
+        new_groups[i] = g_strdup(groups[i]);
+    new_groups[n] = g_strdup(group_path);
+
+    g_free(peer_info->groups);
+    peer_info->groups = (const char **) new_groups;
+    return TRUE;
+}
+
+static gboolean
+_p2p_go_negotiation_apply_group(NMSupplicantInterface *self, NMSupplicantPeerInfo *peer_info)
+{
+    NMSupplicantInterfacePrivate *priv = NM_SUPPLICANT_INTERFACE_GET_PRIVATE(self);
+    gboolean                        changed    = FALSE;
+
+    /* The peer/group association is needed on both sides of a negotiation.
+     * In particular, for a client the supplicant does not always update the
+     * peer's Groups property after GroupStarted, so keep the association here
+     * as well. */
+    if (!priv->go_neg_peer_path || !priv->go_neg_group_path)
+        return FALSE;
+
+    if (!nm_streq(priv->go_neg_peer_path->str, peer_info->peer_path->str))
+        return FALSE;
+
+    changed = _peer_info_add_group(peer_info, priv->go_neg_group_path->str);
+    return changed;
+}
+
+static void
 _peer_info_properties_changed(NMSupplicantInterface *self,
                               NMSupplicantPeerInfo  *peer_info,
                               GVariant              *properties,
@@ -990,6 +1080,7 @@ _peer_info_properties_changed(NMSupplicantInterface *self,
             nm_assert(arr_len == sizeof(peer_info->address));
             peer_info->address_valid = TRUE;
             memcpy(peer_info->address, arr_data, sizeof(peer_info->address));
+            // _LOGD("Peer Info Address Changed: %s");
         } else if (peer_info->address_valid) {
             peer_info->address_valid = FALSE;
             memset(peer_info->address, 0, sizeof(peer_info->address));
@@ -1015,6 +1106,8 @@ _peer_info_properties_changed(NMSupplicantInterface *self,
             peer_info->ies = g_bytes_new(NULL, 0);
         g_variant_unref(v_v);
     }
+
+    _p2p_go_negotiation_apply_group(self, peer_info);
 
     _peer_info_changed_emit(self, peer_info, TRUE);
 }
@@ -1098,6 +1191,10 @@ _peer_info_remove(NMSupplicantInterface *self, NMRefString **p_peer_path)
     c_list_unlink(&peer_info->_peer_lst);
     if (!peer_info->_init_cancellable)
         _peer_info_changed_emit(self, peer_info, FALSE);
+
+    if (priv->go_neg_peer_path && nm_streq(priv->go_neg_peer_path->str, peer_info->peer_path->str))
+        _p2p_go_negotiation_clear(self);
+
     _peer_info_destroy(peer_info);
 
     nm_assert_starting_has_pending_count(priv->starting_pending_count);
@@ -1188,6 +1285,7 @@ set_state_down(NMSupplicantInterface *self,
     nm_clear_g_cancellable(&priv->p2p_group_properties_cancellable);
 
     nm_clear_pointer(&priv->p2p_group_path, nm_ref_string_unref);
+    _p2p_go_negotiation_clear(self);
 
     _remove_network(self);
 
@@ -1940,11 +2038,75 @@ _p2p_provision_discovery_cb(GDBusConnection *connection,
         g_variant_get(parameters, "(&o&s)", &peer_object_path, &generated_pin);
 
     } else {
-        _LOGD("Parameters were given in an unexpected format!");
+        _LOGD("Provision Discovery CB : Parameters were given in an unexpected format!");
         return;
     }
 
     g_signal_emit(self, signals[PD_REQ], 0, generated_pin);
+}
+
+static void
+_p2p_provision_failure_cb(GDBusConnection *connection,
+                            const char      *sender_name,
+                            const char      *object_path,
+                            const char      *signal_interface_name,
+                            const char      *signal_name,
+                            GVariant        *parameters,
+                            gpointer         user_data) {
+
+    // P2pConfigData             *p2p_config_data = user_data;
+    NMSupplicantInterface *self = user_data;
+    // gs_unref_variant GVariant    *props = NULL;
+    const char *peer_object_path;
+    gint        status;
+
+    if (g_variant_is_of_type(parameters, G_VARIANT_TYPE("(oi)"))) {
+        g_variant_get(parameters, "(&o&i)", &peer_object_path, &status);
+
+    } else {
+        _LOGD("Provision Discovery Failure CB: Parameters were given in an unexpected format!");
+        return;
+    }
+    _LOGD("p2p: ProvisionDiscoveryFailure from peer %s with status %d",
+          peer_object_path,
+          status);
+
+}
+
+static void
+_p2p_wps_failure_cb(GDBusConnection *connection,
+                    const char      *sender_name,
+                    const char      *object_path,
+                    const char      *signal_interface_name,
+                    const char      *signal_name,
+                    GVariant        *parameters,
+                    gpointer         user_data)
+{
+    NMSupplicantInterface *self = user_data;
+    gs_free char *parameters_str = NULL;
+
+    parameters_str = g_variant_print(parameters, TRUE);
+    _LOGD("p2p: WpsFailed event from %s: %s", object_path, parameters_str);
+    g_signal_emit(self, signals[P2P_WPS_FAIL], 0, parameters);
+}
+
+static void
+_p2p_group_formation_failure_cb(GDBusConnection *connection,
+                                const char      *sender_name,
+                                const char      *object_path,
+                                const char      *signal_interface_name,
+                                const char      *signal_name,
+                                GVariant        *parameters,
+                                gpointer         user_data)
+{
+    NMSupplicantInterface *self = user_data;
+    gs_free char *parameters_str = NULL;
+
+    parameters_str = g_variant_print(parameters, TRUE);
+    _LOGD("p2p: GroupFormationFailure event from %s: %s",
+          object_path,
+          parameters_str);
+    g_signal_emit(self, signals[P2P_GROUP_FORMATION_FAIL], 0, parameters);
 }
 
 static void
@@ -2007,9 +2169,61 @@ _p2p_handle_set_device_config_cb(GVariant *res, GError *error, gpointer user_dat
                                                _p2p_provision_discovery_cb,
                                                self,
                                                NULL);
-        
+
     } else {
         _LOGD("ProvisionDiscovery signal already subscribed to!");
+    }
+
+    if(!priv->p2p_provision_failure_id) {
+        _LOGD("Subscribing to the ProvisionDiscoveryFailure signals");
+        priv->p2p_provision_failure_id =
+            g_dbus_connection_signal_subscribe(priv->dbus_connection,
+                                               priv->name_owner->str,
+                                               NM_WPAS_DBUS_IFACE_INTERFACE_P2P_DEVICE,
+                                               "ProvisionDiscoveryFailure",
+                                               priv->object_path->str,
+                                               NULL,
+                                               G_DBUS_SIGNAL_FLAGS_NONE,
+                                               _p2p_provision_failure_cb,
+                                               self,
+                                               NULL);
+
+    } else {
+        _LOGD("ProvisionDiscovery signal already subscribed to!");
+    }
+
+    if (!priv->p2p_wps_failure_id) {
+        _LOGD("Subscribing to the P2P WpsFailed signal");
+        priv->p2p_wps_failure_id =
+            g_dbus_connection_signal_subscribe(priv->dbus_connection,
+                                               priv->name_owner->str,
+                                               NM_WPAS_DBUS_IFACE_INTERFACE_P2P_DEVICE,
+                                               "WpsFailed",
+                                               NULL,
+                                               NULL,
+                                               G_DBUS_SIGNAL_FLAGS_NONE,
+                                               _p2p_wps_failure_cb,
+                                               self,
+                                               NULL);
+    } else {
+        _LOGD("P2P WpsFailed signal already subscribed to!");
+    }
+
+    if (!priv->p2p_group_formation_failure_id) {
+        _LOGD("Subscribing to the P2P GroupFormationFailure signal");
+        priv->p2p_group_formation_failure_id =
+            g_dbus_connection_signal_subscribe(priv->dbus_connection,
+                                               priv->name_owner->str,
+                                               NM_WPAS_DBUS_IFACE_INTERFACE_P2P_DEVICE,
+                                               "GroupFormationFailure",
+                                               NULL,
+                                               NULL,
+                                               G_DBUS_SIGNAL_FLAGS_NONE,
+                                               _p2p_group_formation_failure_cb,
+                                               self,
+                                               NULL);
+    } else {
+        _LOGD("P2P GroupFormationFailure signal already subscribed to!");
     }
 }
 
@@ -2054,6 +2268,7 @@ _p2p_call_set_device_config(NMSupplicantInterface *self, P2pConfigData *p2p_conf
 
     g_variant_builder_init(&dict_builder, G_VARIANT_TYPE_VARDICT);
     g_variant_builder_add(&dict_builder,"{sv}","DeviceName",g_variant_new("s", p2p_config_data->host_name));
+    g_variant_builder_add(&dict_builder, "{sv}", "GOIntent", g_variant_new("u", p2p_config_data->go_intent));
     g_variant_builder_add(&dict_builder, "{sv}", "PersistentReconnect", g_variant_new("b", p2p_config_data->persistent_reconnect));
     device_category = g_bytes_new(p2p_config_data->device_category_data,p2p_config_data->device_category_length);
     g_variant_builder_add(&dict_builder, "{sv}", "PrimaryDeviceType", g_variant_new_from_bytes(G_VARIANT_TYPE_BYTESTRING,device_category, TRUE));
@@ -2117,7 +2332,7 @@ _p2p_start_device_config(NMSupplicantInterface *self,
 
         if (!wfd_device_category || !wps_config_methods)
             return;
-        
+
         if (priv->state == NM_SUPPLICANT_INTERFACE_STATE_DOWN) {
             _LOGD("p2pDevConfig: interface is down. Cannot start with P2P Device Config");
             return;
@@ -3142,6 +3357,9 @@ nm_supplicant_interface_p2p_connect(NMSupplicantInterface *self,
 
     g_return_if_fail(NM_IS_SUPPLICANT_INTERFACE(self));
 
+    NMSupplicantInterfacePrivate *priv = NM_SUPPLICANT_INTERFACE_GET_PRIVATE(self);
+    P2pConfigData *p2p_data = priv->p2p_config_data;
+
     _LOGD("Calling P2P-CONNECT with method:%s   pin:%s",wps_method, wps_pin);
 
     g_variant_builder_init(&builder, G_VARIANT_TYPE_VARDICT);
@@ -3151,8 +3369,15 @@ nm_supplicant_interface_p2p_connect(NMSupplicantInterface *self,
         g_variant_builder_add(&builder, "{sv}", "pin", g_variant_new_string(wps_pin));
     g_variant_builder_add(&builder, "{sv}", "peer", g_variant_new_object_path(peer));
     g_variant_builder_add(&builder, "{sv}", "join", g_variant_new_boolean(FALSE));
-    g_variant_builder_add(&builder, "{sv}", "persistent", g_variant_new_boolean(FALSE));
-    g_variant_builder_add(&builder, "{sv}", "go_intent", g_variant_new_int32(7));
+    if(!p2p_data) {
+        _LOGD("Calling P2P-CONNECT with defaults");
+        g_variant_builder_add(&builder, "{sv}", "persistent", g_variant_new_boolean(FALSE));
+        g_variant_builder_add(&builder, "{sv}", "go_intent", g_variant_new_int32(7));
+    } else {
+        _LOGD("Calling P2P-CONNECT with persistent:%d  go_intent:%d",p2p_data->persistent_reconnect, p2p_data->go_intent);
+        g_variant_builder_add(&builder, "{sv}", "persistent", g_variant_new_boolean(p2p_data->persistent_reconnect));
+        g_variant_builder_add(&builder, "{sv}", "go_intent", g_variant_new_int32(p2p_data->go_intent));
+    }
 
     _dbus_connection_call_simple(self,
                                  NM_WPAS_DBUS_IFACE_INTERFACE_P2P_DEVICE,
@@ -3192,6 +3417,25 @@ nm_supplicant_interface_p2p_clear_config(NMSupplicantInterface *self)
             _LOGD("Cleared ProvisionDiscovery signal subscription");
         } else {
             _LOGD("Failed to clear ProvisionDiscovery signal subscription!");
+        }
+
+        if( nm_clear_g_dbus_connection_signal(priv->dbus_connection, &priv->p2p_provision_failure_id) ) {
+            _LOGD("Cleared ProvisionDiscoveryFailure signal subscription");
+        } else {
+            _LOGD("Failed to clear ProvisionDiscoveryFailure signal subscription!");
+        }
+
+        if (nm_clear_g_dbus_connection_signal(priv->dbus_connection, &priv->p2p_wps_failure_id)) {
+            _LOGD("Cleared P2P WpsFailed signal subscription");
+        } else {
+            _LOGD("Failed to clear P2P WpsFailed signal subscription!");
+        }
+
+        if (nm_clear_g_dbus_connection_signal(priv->dbus_connection,
+                                              &priv->p2p_group_formation_failure_id)) {
+            _LOGD("Cleared P2P GroupFormationFailure signal subscription");
+        } else {
+            _LOGD("Failed to clear P2P GroupFormationFailure signal subscription!");
         }
     }
 
@@ -3392,6 +3636,8 @@ _signal_handle(NMSupplicantInterface *self,
         if (!priv->is_ready_main)
             return;
 
+         _LOGD("Received WPA Signal: %s", signal_name);
+
         if (nm_streq(signal_name, "BSSAdded")) {
             if (!g_variant_is_of_type(parameters, G_VARIANT_TYPE("(oa{sv})")))
                 return;
@@ -3456,7 +3702,7 @@ _signal_handle(NMSupplicantInterface *self,
         if (!priv->is_ready_p2p_device)
             return;
 
-        // _LOGD("Received P2P Signal: %s", signal_name);
+        _LOGD("Received P2P Signal: %s", signal_name);
 
         if (nm_streq(signal_name, "DeviceFound")) {
             if (g_variant_is_of_type(parameters, G_VARIANT_TYPE("(o)"))) {
@@ -3511,27 +3757,45 @@ _signal_handle(NMSupplicantInterface *self,
                     return;
                 }
 
-                _LOGD("GroupStarted :: Parameters: %s", g_variant_print(parameters, true));
+                if (nm_streq(group_role, "GO")) {
+                    NMSupplicantPeerInfo *peer_info = NULL;
+                    nm_auto_ref_string NMRefString *peer_path = NULL;
 
-                v_v = g_variant_lookup_value(args, "IpAddr", G_VARIANT_TYPE_BYTESTRING);
-                if (v_v) {
-                    const guint8 *addr_data;
-                    gsize         addr_len  = 0;
-                    const guint8 *mask_data = NULL;
-                    gsize         mask_len  = 0;
+                    _LOGD("GroupStarted :: We are the GO!");
 
-                    /* The address is passed in network-byte-order */
-                    addr_data = g_variant_get_fixed_array(v_v, &addr_len, 1);
+                    nm_clear_pointer(&priv->go_neg_group_path, nm_ref_string_unref);
+                    priv->go_neg_group_path = nm_ref_string_new(nm_dbus_path_not_empty(group_path));
 
-                    /* TODO: Should we expose IpAddrGo? If yes, maybe as gateway? */
-                    v_v = g_variant_lookup_value(args, "IpAddrMask", G_VARIANT_TYPE_BYTESTRING);
-                    if (v_v)
-                        mask_data = g_variant_get_fixed_array(v_v, &mask_len, 1);
+                    if (priv->go_neg_peer_path) {
+                        peer_path = nm_ref_string_new(priv->go_neg_peer_path->str);
+                        peer_info = g_hash_table_lookup(priv->peer_idx, &peer_path);
+                        if (peer_info) {
+                            if (_p2p_go_negotiation_apply_group(self, peer_info))
+                                _peer_info_changed_emit(self, peer_info, TRUE);
+                        }
+                    }
+                } else {
+                    _LOGD("GroupStarted :: Parameters: %s", g_variant_print(parameters, true));
 
-                    if (addr_len == NM_AF_INET_SIZE && mask_len == NM_AF_INET_SIZE) {
-                        guint32 netmask;
+                    v_v = g_variant_lookup_value(args, "IpAddr", G_VARIANT_TYPE_BYTESTRING);
+                    if (v_v) {
+                        const guint8 *addr_data;
+                        gsize         addr_len  = 0;
+                        const guint8 *mask_data = NULL;
+                        gsize         mask_len  = 0;
 
-                        memcpy(&netmask, mask_data, NM_AF_INET_SIZE);
+                        /* The address is passed in network-byte-order */
+                        addr_data = g_variant_get_fixed_array(v_v, &addr_len, 1);
+
+                        /* TODO: Should we expose IpAddrGo? If yes, maybe as gateway? */
+                        v_v = g_variant_lookup_value(args, "IpAddrMask", G_VARIANT_TYPE_BYTESTRING);
+                        if (v_v)
+                            mask_data = g_variant_get_fixed_array(v_v, &mask_len, 1);
+
+                        if (addr_len == NM_AF_INET_SIZE && mask_len == NM_AF_INET_SIZE) {
+                            guint32 netmask;
+
+                            memcpy(&netmask, mask_data, NM_AF_INET_SIZE);
 
                         _set_p2p_assigned_addr(iface,
                                                addr_data,
@@ -3541,22 +3805,22 @@ _signal_handle(NMSupplicantInterface *self,
                     }
                 }
 
-                u_v = g_variant_lookup_value(args, "IpAddrGo", G_VARIANT_TYPE_BYTESTRING);
-                if(u_v) {
-                    const guint8 *addr_data;
-                    gsize         addr_len  = 0;
-                    
+                    u_v = g_variant_lookup_value(args, "IpAddrGo", G_VARIANT_TYPE_BYTESTRING);
+                    if (u_v) {
+                        const guint8 *addr_data;
+                        gsize         addr_len = 0;
 
-                    /* The address is passed in network-byte-order */
-                    addr_data = g_variant_get_fixed_array(u_v, &addr_len, 1);
-                    if(addr_len == NM_AF_INET_SIZE) {
-                        _LOGD("GroupStarted signal included IpAddrGo address");
-                        _set_p2p_assigned_go(iface,addr_data);
+                        /* The address is passed in network-byte-order */
+                        addr_data = g_variant_get_fixed_array(u_v, &addr_len, 1);
+                        if (addr_len == NM_AF_INET_SIZE) {
+                            _LOGD("GroupStarted signal included IpAddrGo address");
+                            _set_p2p_assigned_go(iface, addr_data);
+                        } else {
+                            _LOGD("Invalid IpAddrGo Length!");
+                        }
                     } else {
-                        _LOGD("Invalid IpAddrGo Length!");
+                        _LOGW("P2P: GroupStarted signaled empty or invalid GO IP Address information");
                     }
-                } else {
-                    _LOGW("P2P: GroupStarted signaled empty or invalid GO IP Address information");
                 }
 
                 /* Signal existence of the (new) interface. */
@@ -3583,10 +3847,25 @@ _signal_handle(NMSupplicantInterface *self,
                       priv->object_path->str,
                       iface_path);
 
+                _LOGD("GroupFinished :: Parameters: %s", g_variant_print(parameters, true));
+                // _dbus_connection_call_simple(self,
+                //                  NM_WPAS_DBUS_IFACE_INTERFACE_P2P_DEVICE,
+                //                  "RemoveClient",
+                //                  g_variant_new("(a{sv})", &builder),
+                //                  G_VARIANT_TYPE("(s)"),
+                //                  "remove-client");
+
                 /* Signal group finish interface (on management interface). */
                 g_signal_emit(self, signals[GROUP_FINISHED], 0, iface_path);
+                _p2p_go_negotiation_clear(self);
             }
             return;
+        }
+
+        if(nm_streq(signal_name, "PersistentGroupAdded")) {
+            //TODO: handle persistent formations
+            _LOGD("PersistentGroupAdded :: Parameters: %s", g_variant_print(parameters, true));
+
         }
 
         if(nm_streq(signal_name, "InvitationReceived")) {
@@ -3595,15 +3874,14 @@ _signal_handle(NMSupplicantInterface *self,
 
             //TODO: Handle P2P Invitation Requets
             if (g_variant_is_of_type(parameters, G_VARIANT_TYPE("(a{sv})"))){
-                
+
                 g_variant_get(parameters, "(@a{sv})", &args);
-                
+
                 v_v = g_variant_lookup_value(args, "go_dev_addr", G_VARIANT_TYPE_BYTESTRING);
                 if(v_v){
                     const guint8 *addr_data;
                     gsize         addr_len  = 0;
                     const char   *dev_addr;
-                    
 
                     addr_data = g_variant_get_fixed_array(v_v, &addr_len, 1);
                    
@@ -3613,12 +3891,12 @@ _signal_handle(NMSupplicantInterface *self,
 
                         _LOGD("P2P INVITATION :: go_dev_addr : %s", dev_addr);
                         g_signal_emit(self, signals[GROUP_INVITED], 0, dev_addr);
-                        
+
                     } else {
                         _LOGD("P2P INVITATION :: invalid go_dev_addr len : %i", addr_len);
                     }
 
-                }            
+                }
             }
         }
 
@@ -3626,17 +3904,92 @@ _signal_handle(NMSupplicantInterface *self,
             if(g_variant_is_of_type(parameters, G_VARIANT_TYPE("(oqy)"))){
                 const char  *peer_path;
                 guint        pwd_id;
-                guint        peer_go_intent;
+                guint8        peer_go_intent;
 
                 g_variant_get(parameters, "(&oqy)", &peer_path, &pwd_id, &peer_go_intent);
 
                 g_signal_emit(self, signals[GO_NEG_REQ], 0, peer_path, pwd_id, peer_go_intent);
-                
+
 
             }
         }
-        if(nm_streq(signal_name, "GONegotiationFailure")) {
 
+        if(nm_streq(signal_name, "GONegotiationSuccess")) {
+            if (g_variant_is_of_type(parameters, G_VARIANT_TYPE("(a{sv})"))) {
+                gs_unref_variant GVariant *args = NULL;
+                gs_unref_variant GVariant *ssid_v = NULL;
+                gs_unref_variant GVariant *peer_device_addr_v = NULL;
+                gs_unref_variant GVariant *peer_interface_addr_v = NULL;
+                gs_unref_variant GVariant *frequency_list_v = NULL;
+                gs_free char                *ssid_str = NULL;
+                gs_free char                *peer_device_addr_str = NULL;
+                gs_free char                *peer_interface_addr_str = NULL;
+                gs_free char                *frequency_list_str = NULL;
+                gs_free char                *parameters_str = NULL;
+                const char                  *peer_object = NULL;
+                const char                  *passphrase = NULL;
+                const char                  *role_go = NULL;
+                const char                  *wps_method = NULL;
+                gint                         status = 0;
+                gint                         persistent_group = 0;
+                guint                        peer_config_timeout = 0;
+
+                g_variant_get(parameters, "(@a{sv})", &args);
+
+                g_variant_lookup(args, "peer_object", "&o", &peer_object);
+                g_variant_lookup(args, "status", "i", &status);
+                g_variant_lookup(args, "passphrase", "&s", &passphrase);
+                g_variant_lookup(args, "role_go", "&s", &role_go);
+                g_variant_lookup(args, "wps_method", "&s", &wps_method);
+                g_variant_lookup(args, "persistent_group", "i", &persistent_group);
+                g_variant_lookup(args, "peer_config_timeout", "u", &peer_config_timeout);
+
+                ssid_v = g_variant_lookup_value(args, "ssid", G_VARIANT_TYPE_BYTESTRING);
+                if (ssid_v)
+                    ssid_str = g_variant_print(ssid_v, TRUE);
+
+                peer_device_addr_v =
+                    g_variant_lookup_value(args, "peer_device_addr", G_VARIANT_TYPE_BYTESTRING);
+                if (peer_device_addr_v) {
+                    const guint8 *addr_data;
+                    gsize         addr_len = 0;
+
+                    addr_data = g_variant_get_fixed_array(peer_device_addr_v, &addr_len, 1);
+                    if (addr_len > 0)
+                        peer_device_addr_str = nm_utils_hwaddr_ntoa(addr_data, addr_len);
+                }
+
+                peer_interface_addr_v =
+                    g_variant_lookup_value(args, "peer_interface_addr", G_VARIANT_TYPE_BYTESTRING);
+                if (peer_interface_addr_v) {
+                    const guint8 *addr_data;
+                    gsize         addr_len = 0;
+
+                    addr_data = g_variant_get_fixed_array(peer_interface_addr_v, &addr_len, 1);
+                    if (addr_len > 0)
+                        peer_interface_addr_str = nm_utils_hwaddr_ntoa(addr_data, addr_len);
+                }
+
+                frequency_list_v =
+                    g_variant_lookup_value(args, "frequency_list", G_VARIANT_TYPE("ai"));
+                if (frequency_list_v)
+                    frequency_list_str = g_variant_print(frequency_list_v, TRUE);
+
+                if (peer_object) {
+                    _p2p_go_negotiation_set_peer(self, peer_object);
+                    priv->go_neg_is_go = nm_streq(role_go, "GO");
+                } else {
+                    _p2p_go_negotiation_clear(self);
+                }
+
+                parameters_str = g_variant_print(parameters, true);
+                _LOGD("P2P: GONegotiationSuccess :: Parameters: %s", parameters_str);
+            }
+            return;
+        }
+
+        if(nm_streq(signal_name, "GONegotiationFailure")) {
+            _p2p_go_negotiation_clear(self);
         }
 
         return;
@@ -4207,4 +4560,27 @@ nm_supplicant_interface_class_init(NMSupplicantInterfaceClass *klass)
                                      G_TYPE_STRING,
                                      G_TYPE_INT,
                                      G_TYPE_INT);
+
+    signals[P2P_WPS_FAIL] = g_signal_new(NM_SUPPLICANT_INTERFACE_P2P_WPS_FAILURE,
+                                          G_OBJECT_CLASS_TYPE(object_class),
+                                          G_SIGNAL_RUN_LAST,
+                                          0,
+                                          NULL,
+                                          NULL,
+                                          NULL,
+                                          G_TYPE_NONE,
+                                          1,
+                                          G_TYPE_VARIANT);
+
+    signals[P2P_GROUP_FORMATION_FAIL] =
+        g_signal_new(NM_SUPPLICANT_INTERFACE_P2P_GROUP_FORMATION_FAILURE,
+                     G_OBJECT_CLASS_TYPE(object_class),
+                     G_SIGNAL_RUN_LAST,
+                     0,
+                     NULL,
+                     NULL,
+                     NULL,
+                     G_TYPE_NONE,
+                     1,
+                     G_TYPE_VARIANT);
 }

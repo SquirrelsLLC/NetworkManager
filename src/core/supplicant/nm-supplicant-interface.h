@@ -90,6 +90,8 @@ typedef enum {
 #define NM_SUPPLICANT_INTERFACE_GROUP_INVITATION "group-invitation"
 #define NM_SUPPLICANT_INTERFACE_GO_NEG_REQEUST  "go-neg-request"
 #define NM_SUPPLICANT_INTERFACE_GO_NEG_FAILURE  "go-neg-failure"
+#define NM_SUPPLICANT_INTERFACE_P2P_WPS_FAILURE "p2p-wps-failure"
+#define NM_SUPPLICANT_INTERFACE_P2P_GROUP_FORMATION_FAILURE "p2p-group-formation-failure"
 
 typedef struct _NMSupplicantInterfaceClass NMSupplicantInterfaceClass;
 
