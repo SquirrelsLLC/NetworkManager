@@ -21,7 +21,7 @@
     (G_TYPE_INSTANCE_GET_CLASS((obj), NM_TYPE_DEVICE_WIFI_P2P, NMDeviceWifiP2PClass))
 
 #define NM_DEVICE_WIFI_P2P_PEERS  "peers"
-#define NM_DEVICE_WIFI_P2P_GROUPS "groups"
+#define NM_DEVICE_WIFI_P2P_GROUP  "group"
 #define NM_DEVICE_WIFI_P2P_PIN "pin"
 
 typedef struct _NMDeviceWifiP2P      NMDeviceWifiP2P;

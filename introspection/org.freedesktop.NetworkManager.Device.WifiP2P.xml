@@ -25,6 +25,13 @@
     <property name="Peers" type="ao" access="read"/>
 
     <!--
+        Group:
+
+        Object path to the current group interface.
+    -->
+    <property name="Group" type="o" access="read"/>
+
+    <!--
         StartFind:
         @options: Options of find.
 
